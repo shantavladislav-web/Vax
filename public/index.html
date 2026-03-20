@@ -91,21 +91,21 @@ body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradie
 .chat-peer-status.online{color:var(--green)}
 
 /* MESSAGES */
-.messages{flex:1;overflow-y:auto;padding:12px 14px;display:flex;flex-direction:column;gap:2px;scrollbar-width:none;background:var(--bg);background-image:radial-gradient(ellipse at 15% 50%,rgba(123,47,255,.03) 0%,transparent 55%),radial-gradient(ellipse at 85% 20%,rgba(0,229,255,.03) 0%,transparent 45%)}
+.messages{flex:1;overflow-y:auto;overflow-x:hidden;padding:12px 12px;display:flex;flex-direction:column;gap:2px;scrollbar-width:none;background:var(--bg);background-image:radial-gradient(ellipse at 15% 50%,rgba(123,47,255,.03) 0%,transparent 55%),radial-gradient(ellipse at 85% 20%,rgba(0,229,255,.03) 0%,transparent 45%)}
 .messages::-webkit-scrollbar{display:none}
 
 .date-sep{text-align:center;margin:10px 0 6px;font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--dim);letter-spacing:2px}
 
-.msg-wrap{display:flex;gap:8px;align-items:flex-end;margin-bottom:2px}
+.msg-wrap{display:flex;gap:8px;align-items:flex-end;margin-bottom:2px;width:100%}
 .msg-wrap.mine{flex-direction:row-reverse}
 .msg-wrap.continuation .msg-small-av{visibility:hidden}
 .msg-small-av{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:'Rajdhani',sans-serif;font-weight:700;font-size:10px;color:#fff;flex-shrink:0}
-.bubble{max-width:72vw;padding:8px 12px;border-radius:16px;font-size:14px;line-height:1.5;word-break:break-word;position:relative}
+.bubble{max-width:70vw;min-width:0;padding:8px 12px;border-radius:16px;font-size:14px;line-height:1.5;word-break:break-word;position:relative}
 .bubble.theirs{background:var(--card);border:1px solid var(--border);border-bottom-left-radius:4px;color:var(--text)}
 .bubble.mine{background:linear-gradient(135deg,rgba(123,47,255,.35),rgba(0,229,255,.15));border:1px solid rgba(0,229,255,.2);border-bottom-right-radius:4px;color:#ddf0ff}
 .bubble-name{font-size:11px;font-weight:600;margin-bottom:3px}
 .bubble-time{font-size:10px;color:var(--dim);font-family:'Share Tech Mono',monospace;margin-top:3px;text-align:right}
-.bubble-img{max-width:220px;max-height:280px;border-radius:10px;display:block;cursor:pointer;margin-top:4px}
+.bubble-img{max-width:min(220px,60vw);max-height:280px;border-radius:10px;display:block;cursor:pointer;margin-top:4px}
 
 /* TYPING */
 .typing-bar{padding:4px 14px 6px;font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--muted);min-height:22px;display:flex;align-items:center;gap:6px}
@@ -833,10 +833,4 @@ function openLb(src){ document.getElementById('lbImg').src=src; document.getElem
 // ── UTILS ─────────────────────────────────────────────
 function ini(n){ return String(n||'?').slice(0,2).toUpperCase(); }
 function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-function fmtTime(iso){ try{return new Date(iso).toLocaleTimeString('uk-UA',{hour:'2-digit',minute:'2-digit'});}catch{return '';} }
-function linkify(s){ return s.replace(/(https?:\/\/[^\s<]+)/g,'<a href="$1" target="_blank" rel="noopener" style="color:var(--accent)">$1</a>'); }
-function setBadge(txt,color){ const b=document.getElementById('connBadge'); b.textContent=txt; b.style.color=color; }
-function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),3000); }
-</script>
-</body>
-</html>
+function fmtTime(iso){ try{return new Date(iso).toLocaleTimeString('uk-UA',{hour:'2-digit',minute:'2-digit'});}catch{return '';} 
