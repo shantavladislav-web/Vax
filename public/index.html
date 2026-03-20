@@ -159,6 +159,33 @@ body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradie
 
 @keyframes fadeUp{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
 .fadein{animation:fadeUp .2s ease}
+
+/* ── EMOJI / STICKER PANEL ── */
+.emoji-panel{position:fixed;bottom:70px;left:0;right:0;background:var(--panel);border-top:1px solid var(--border);z-index:50;display:none;flex-direction:column;max-height:320px}
+.emoji-panel.open{display:flex}
+.emoji-panel-tabs{display:flex;border-bottom:1px solid var(--border);background:var(--panel);flex-shrink:0}
+.ep-tab{flex:1;padding:10px;text-align:center;font-size:18px;cursor:pointer;border-bottom:2px solid transparent;transition:border-color .15s}
+.ep-tab.active{border-bottom-color:var(--accent)}
+.emoji-panel-body{flex:1;overflow-y:auto;padding:10px;scrollbar-width:none}
+.emoji-panel-body::-webkit-scrollbar{display:none}
+
+/* emoji grid */
+.emoji-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(38px,1fr));gap:4px}
+.ep-emoji{font-size:24px;width:38px;height:38px;display:flex;align-items:center;justify-content:center;border-radius:8px;cursor:pointer;transition:background .1s;border:none;background:none}
+.ep-emoji:active{background:var(--hover)}
+
+/* sticker grid */
+.sticker-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(80px,1fr));gap:8px}
+.ep-sticker{width:80px;height:80px;border-radius:10px;cursor:pointer;object-fit:cover;border:2px solid transparent;transition:border-color .15s;background:var(--card)}
+.ep-sticker:active{border-color:var(--accent)}
+.ep-sticker-add{width:80px;height:80px;border-radius:10px;border:2px dashed var(--border);display:flex;align-items:center;justify-content:center;font-size:28px;cursor:pointer;color:var(--dim);transition:border-color .15s;background:none}
+.ep-sticker-add:active{border-color:var(--accent)}
+.ep-sticker-del{position:absolute;top:2px;right:2px;width:18px;height:18px;border-radius:50%;background:var(--accent3);border:none;color:#fff;font-size:10px;cursor:pointer;display:none;align-items:center;justify-content:center;line-height:1}
+.sticker-wrap{position:relative;display:inline-block}
+.sticker-wrap:hover .ep-sticker-del{display:flex}
+
+/* bubble sticker */
+.bubble-sticker{max-width:120px;max-height:120px;border-radius:12px;display:block;cursor:pointer;margin:2px 0}
 </style>
 </head>
 <body>
@@ -209,12 +236,24 @@ body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradie
   </div>
   <div class="messages" id="messages"></div>
   <div class="typing-bar" id="typingBar"></div>
+
+  <!-- EMOJI PANEL -->
+  <div class="emoji-panel" id="emojiPanel">
+    <div class="emoji-panel-tabs">
+      <div class="ep-tab active" id="epTabEmoji" onclick="switchEpTab('emoji')">😊</div>
+      <div class="ep-tab" id="epTabSticker" onclick="switchEpTab('sticker')">🎭</div>
+    </div>
+    <div class="emoji-panel-body" id="emojiPanelBody"></div>
+  </div>
+
   <div class="input-row">
     <div class="input-box">
       <button class="attach-btn" onclick="document.getElementById('fileInp').click()">📎</button>
       <input type="file" id="fileInp" accept="image/*" onchange="sendImg(this)">
+      <input type="file" id="stickerInp" accept="image/*" onchange="addCustomSticker(this)" style="display:none">
       <textarea class="msg-inp" id="msgInp" placeholder="Повідомлення..." rows="1"
         onkeydown="handleKey(event)" oninput="onType(this)"></textarea>
+      <button class="attach-btn" onclick="toggleEmojiPanel()" id="emojiBtn">😊</button>
     </div>
     <button class="send-btn" onclick="sendMsg()">➤</button>
   </div>
@@ -589,7 +628,9 @@ function appendMsg(msg, doScroll=true){
   wrap.className='msg-wrap fadein'+(isMe?' mine':'');
 
   let content='';
-  if(msg.msgType==='image'){
+  if(msg.msgType==='sticker'){
+    content=`<img class="bubble-sticker" src="${msg.imageData}" onclick="openLb('${msg.imageData}')" alt="стікер">`;
+  } else if(msg.msgType==='image'){
     content=`<img class="bubble-img" src="${msg.imageData}" onclick="openLb('${msg.imageData}')" alt="фото">`;
   } else {
     content=`<div>${linkify(esc(msg.text))}</div>`;
@@ -845,6 +886,120 @@ function fmtTime(iso){ try{return new Date(iso).toLocaleTimeString('uk-UA',{hour
 function linkify(s){ return s.replace(/(https?:\/\/[^\s<]+)/g,'<a href="$1" target="_blank" rel="noopener" style="color:var(--accent)">$1</a>'); }
 function setBadge(txt,color){ const b=document.getElementById('connBadge'); b.textContent=txt; b.style.color=color; }
 function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),3000); }
+
+// ── EMOJI & STICKERS ──────────────────────────────────
+const EMOJIS_ALL = [
+  '😀','😁','😂','🤣','😃','😄','😅','😆','😉','😊','😋','😎','😍','🥰','😘','🥹','😗','😙',
+  '🙂','🤗','🤩','🤔','🤨','😐','😑','😶','🙄','😏','😣','😥','😮','🤐','😯','😪','😫','🥱',
+  '😴','😌','😛','😜','😝','😒','😓','😔','😕','🙃','🤑','😲','☹️','🙁','😖','😞','😟',
+  '😤','😢','😭','😦','😧','😨','😩','🤯','😬','😰','😱','🥵','🥶','😳','🤪','😵','😠','😡',
+  '🤬','😷','🤒','🤕','🤢','🤮','🤧','🥳','🤠','🥺','🫡','🫣','🫢',
+  '👍','👎','👏','🙌','🤝','👊','✊','🤛','🤜','🤞','✌️','🤟','🤘','👌','🤌','🤏','👈','👉',
+  '👆','👇','☝️','✋','🤚','🖐','🙏','👋','🤙','💪','💅',
+  '❤️','🧡','💛','💚','💙','💜','🖤','🤍','🤎','💔','❤️‍🔥','💕','💞','💓','💗','💖','💘','💝',
+  '🔥','⭐','🌟','✨','💫','💥','❄️','🌈','☀️','🌙','⚡','🎉','🎊','🎈','🎁','🏆','🥇','💯',
+  '😺','😸','😹','😻','😼','😽','🙀','😿','😾','🐶','🐱','🐭','🐰','🦊','🐻','🐼','🐨','🐯',
+  '🍕','🍔','🍟','🌮','🍣','🍜','🍦','🍰','🎂','🍩','🍪','☕','🧋','🍺','🥂',
+  '⚽','🏀','🏈','🎾','🎮','🕹️','🎯','🎲','🎸','🎵','🎶','🎤','📱','💻','🖥️',
+  '😈','👿','💀','☠️','👻','👽','🤖','💩','🎃','🤡',
+];
+
+const LS_STICKERS = 'vax_stickers';
+let customStickers = lsGet(LS_STICKERS, []);
+let epTab = 'emoji';
+let emojiPanelOpen = false;
+
+function toggleEmojiPanel(){
+  emojiPanelOpen = !emojiPanelOpen;
+  const panel = document.getElementById('emojiPanel');
+  if(emojiPanelOpen){ panel.classList.add('open'); renderEpTab(); }
+  else panel.classList.remove('open');
+}
+
+function closeEmojiPanel(){
+  emojiPanelOpen = false;
+  document.getElementById('emojiPanel').classList.remove('open');
+}
+
+function switchEpTab(tab){
+  epTab = tab;
+  document.getElementById('epTabEmoji').className = 'ep-tab'+(tab==='emoji'?' active':'');
+  document.getElementById('epTabSticker').className = 'ep-tab'+(tab==='sticker'?' active':'');
+  renderEpTab();
+}
+
+function renderEpTab(){
+  const body = document.getElementById('emojiPanelBody');
+  if(epTab === 'emoji'){
+    body.innerHTML = `<div class="emoji-grid">${EMOJIS_ALL.map(e=>`<button class="ep-emoji" onclick="insertEmoji('${e}')">${e}</button>`).join('')}</div>`;
+  } else {
+    renderStickers();
+  }
+}
+
+function renderStickers(){
+  const body = document.getElementById('emojiPanelBody');
+  const stickersHtml = customStickers.map((s,i)=>`
+    <div class="sticker-wrap">
+      <img class="ep-sticker" src="${s}" onclick="sendSticker(${i})" alt="стікер">
+      <button class="ep-sticker-del" onclick="deleteSticker(event,${i})">×</button>
+    </div>`).join('');
+  body.innerHTML = `<div class="sticker-grid">
+    ${stickersHtml}
+    <div class="ep-sticker-add" onclick="document.getElementById('stickerInp').click()" title="Додати стікер">＋</div>
+  </div>
+  <div style="font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--dim);text-align:center;margin-top:8px">
+    Довге натискання на стікер — видалити
+  </div>`;
+}
+
+function insertEmoji(emoji){
+  const inp = document.getElementById('msgInp');
+  const pos = inp.selectionStart || inp.value.length;
+  inp.value = inp.value.slice(0,pos) + emoji + inp.value.slice(pos);
+  inp.focus();
+  inp.selectionStart = inp.selectionEnd = pos + emoji.length;
+}
+
+function addCustomSticker(inp){
+  const file = inp.files[0]; if(!file) return;
+  if(file.size > 3*1024*1024){toast('Стікер занадто великий (макс 3МБ)'); return;}
+  const r = new FileReader();
+  r.onload = e => {
+    customStickers.push(e.target.result);
+    if(customStickers.length > 50) customStickers.shift(); // max 50 stickers
+    lsSet(LS_STICKERS, customStickers);
+    renderStickers();
+    toast('✅ Стікер додано!');
+  };
+  r.readAsDataURL(file);
+  inp.value='';
+}
+
+function deleteSticker(e, i){
+  e.stopPropagation();
+  customStickers.splice(i,1);
+  lsSet(LS_STICKERS, customStickers);
+  renderStickers();
+}
+
+function sendSticker(i){
+  const imageData = customStickers[i];
+  if(!imageData||!currentChat||!ws||ws.readyState!==1) return;
+  if(currentChat.type==='group'){
+    ws.send(JSON.stringify({type:'group_img',groupId:currentChat.id,imageData}));
+    const msg={id:'t'+Date.now(),from:{id:me.id,name:me.name,color:me.color},imageData,time:new Date().toISOString(),msgType:'sticker'};
+    appendMsg(msg);
+  } else {
+    ws.send(JSON.stringify({type:'dm_img',toId:currentChat.id,imageData}));
+    const msg={id:'t'+Date.now(),from:{id:me.id,name:me.name,color:me.color},imageData,time:new Date().toISOString(),msgType:'sticker'};
+    appendMsg(msg);
+    if(!dmHistories[currentChat.id]) dmHistories[currentChat.id]=[];
+    dmHistories[currentChat.id].push(msg);
+    saveDm(currentChat.id,dmHistories[currentChat.id]);
+  }
+  closeEmojiPanel();
+}
 </script>
 </body>
 </html>
