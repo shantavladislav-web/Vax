@@ -531,23 +531,30 @@ function renderGroups(){
 
 function renderDms(){
   const el=document.getElementById('dmsList');
-  // Show contacts that have DM history OR are online
-  const list=Object.values(contacts).filter(c=>c.id!==me?.id&&(dmHistories[c.id]?.length||unread[c.id]));
-  // Also show online contacts
-  const online=Object.values(contacts).filter(c=>c.id!==me?.id&&c.online&&!list.find(x=>x.id===c.id));
-  const all=[...list,...online];
-  if(!all.length){el.innerHTML='<div class="empty-list">ПОКИ НІКОГО<br><br>Натисни ＋ щоб написати</div>';return;}
+  // Show ALL contacts: those with DM history, unread, online, or just known
+  const all=Object.values(contacts).filter(c=>c.id!==me?.id);
+  // Sort: unread first, then those with history, then online, then rest
+  all.sort((a,b)=>{
+    const ua=unread[a.id]||0, ub=unread[b.id]||0;
+    if(ub!==ua) return ub-ua;
+    const ha=dmHistories[a.id]?.length||0, hb=dmHistories[b.id]?.length||0;
+    if(hb!==ha) return hb-ha;
+    if(b.online!==a.online) return b.online?1:-1;
+    return 0;
+  });
+  if(!all.length){el.innerHTML='<div class="empty-list">ПОКИ НІКОГО ОНЛАЙН<br><br>Натисни ＋ щоб написати</div>';return;}
   el.innerHTML=all.map(c=>{
     const hist=dmHistories[c.id]||[];
     const last=hist[hist.length-1];
-    const preview=last?(last.msgType==='image'?'📷 Фото':(last.from.id===me?.id?'Ти: ':'')+last.text):'';
+    const preview=last?(last.msgType==='image'||last.msgType==='sticker'?'📷 Фото':(last.from.id===me?.id?'Ти: ':'')+last.text):'';
     const u=unread[c.id]||0;
     const time=last?fmtTime(last.time):'';
+    const statusText=c.online?'● онлайн':(preview?esc(preview.slice(0,40)):'офлайн');
     return `<div class="chat-item fadein" onclick="openDm('${c.id}')">
-      <div class="chat-av" style="background:${c.color}">${ini(c.name)}${c.online?'<div class="online-dot"></div>':''}</div>
+      <div class="chat-av" style="background:${c.color};position:relative">${ini(c.name)}${c.online?'<div class="online-dot"></div>':''}</div>
       <div class="chat-info">
         <div class="chat-name">${esc(c.name)}</div>
-        <div class="chat-preview">${c.online?'● онлайн':esc(preview.slice(0,40))}</div>
+        <div class="chat-preview" style="color:${c.online?'var(--green)':'var(--muted)'}">${statusText}</div>
       </div>
       <div class="chat-meta">
         <div class="chat-time">${time}</div>
