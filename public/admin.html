@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VAX Admin</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;700&family=Share+Tech+Mono&family=Exo+2:wght@400;600&display=swap');
+:root{--bg:#050810;--panel:#080d1a;--card:#0c1428;--hover:#111e3a;--accent:#00e5ff;--accent2:#7b2fff;--accent3:#ff2d78;--green:#00ff88;--text:#e8f0ff;--muted:#4a6080;--dim:#2a3a55;--border:#1a2a45}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Exo 2',sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,.05) 2px,rgba(0,0,0,.05) 4px);pointer-events:none;z-index:9999}
+
+/* LOGIN */
+#loginWrap{display:flex;align-items:center;justify-content:center;min-height:100vh}
+.login-box{background:var(--panel);border:1px solid var(--border);border-radius:16px;padding:40px;width:320px;display:flex;flex-direction:column;gap:20px}
+.logo{font-family:'Rajdhani',sans-serif;font-size:36px;font-weight:700;letter-spacing:10px;color:var(--accent);text-shadow:0 0 20px rgba(0,229,255,.5);text-align:center}
+.logo span{color:var(--accent3)}
+.logo-sub{font-family:'Share Tech Mono',monospace;font-size:11px;letter-spacing:3px;color:var(--dim);text-align:center;margin-top:-14px}
+.inp{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:12px 14px;color:var(--text);font-family:'Exo 2',sans-serif;font-size:15px;outline:none;width:100%}
+.inp:focus{border-color:var(--accent)}
+.btn{background:linear-gradient(135deg,var(--accent2),var(--accent));border:none;border-radius:8px;padding:12px;color:#fff;font-family:'Rajdhani',sans-serif;font-size:16px;font-weight:700;letter-spacing:2px;cursor:pointer;width:100%}
+.btn:hover{opacity:.9}
+.btn.danger{background:var(--accent3)}
+.btn.grey{background:var(--card);border:1px solid var(--border);color:var(--muted)}
+.err{color:var(--accent3);font-size:13px;font-family:'Share Tech Mono',monospace;text-align:center}
+
+/* ADMIN PANEL */
+#adminWrap{display:none;padding:20px;max-width:900px;margin:0 auto}
+.topbar{display:flex;align-items:center;gap:12px;margin-bottom:24px;padding-bottom:16px;border-bottom:1px solid var(--border)}
+.topbar-logo{font-family:'Rajdhani',sans-serif;font-size:24px;font-weight:700;letter-spacing:8px;color:var(--accent)}
+.topbar-logo span{color:var(--accent3)}
+.badge{font-family:'Share Tech Mono',monospace;font-size:10px;letter-spacing:2px;padding:3px 8px;border-radius:4px;background:rgba(255,45,120,.15);border:1px solid rgba(255,45,120,.4);color:var(--accent3)}
+.logout-btn{margin-left:auto;background:none;border:1px solid var(--border);border-radius:6px;color:var(--muted);font-size:12px;padding:6px 12px;cursor:pointer;font-family:'Share Tech Mono',monospace}
+.logout-btn:hover{border-color:var(--accent3);color:var(--accent3)}
+
+/* STATS */
+.stats-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:24px}
+.stat-card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px;text-align:center}
+.stat-num{font-family:'Rajdhani',sans-serif;font-size:36px;font-weight:700;color:var(--accent)}
+.stat-label{font-family:'Share Tech Mono',monospace;font-size:10px;letter-spacing:2px;color:var(--muted);margin-top:4px}
+
+/* SECTION */
+.section{background:var(--panel);border:1px solid var(--border);border-radius:12px;margin-bottom:20px;overflow:hidden}
+.section-title{padding:14px 18px;font-family:'Rajdhani',sans-serif;font-size:16px;font-weight:700;letter-spacing:2px;color:var(--accent);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.refresh-btn{background:none;border:1px solid var(--border);border-radius:6px;color:var(--muted);font-size:11px;padding:4px 10px;cursor:pointer;font-family:'Share Tech Mono',monospace}
+.refresh-btn:hover{border-color:var(--accent);color:var(--accent)}
+
+/* TABLE */
+.tbl{width:100%;border-collapse:collapse}
+.tbl th{padding:10px 16px;text-align:left;font-family:'Share Tech Mono',monospace;font-size:10px;letter-spacing:2px;color:var(--dim);border-bottom:1px solid var(--border)}
+.tbl td{padding:12px 16px;border-bottom:1px solid rgba(26,42,69,.5);font-size:13px}
+.tbl tr:last-child td{border-bottom:none}
+.tbl tr:hover td{background:var(--hover)}
+.online-pill{display:inline-flex;align-items:center;gap:5px;font-family:'Share Tech Mono',monospace;font-size:10px;padding:2px 8px;border-radius:10px}
+.online-pill.on{background:rgba(0,255,136,.1);color:var(--green);border:1px solid rgba(0,255,136,.3)}
+.online-pill.off{background:rgba(42,58,85,.3);color:var(--dim);border:1px solid var(--border)}
+.action-btn{background:none;border:1px solid var(--border);border-radius:5px;color:var(--muted);font-size:11px;padding:4px 10px;cursor:pointer;font-family:'Share Tech Mono',monospace;transition:all .15s}
+.action-btn:hover{border-color:var(--accent3);color:var(--accent3)}
+.action-btn.edit:hover{border-color:var(--accent);color:var(--accent)}
+.user-av{width:28px;height:28px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-family:'Rajdhani',sans-serif;font-weight:700;font-size:11px;color:#fff;margin-right:8px;vertical-align:middle}
+
+/* MODAL */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.75);display:none;align-items:center;justify-content:center;z-index:100}
+.modal-overlay.open{display:flex}
+.modal{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:28px;width:320px;display:flex;flex-direction:column;gap:16px}
+.modal-title{font-family:'Rajdhani',sans-serif;font-size:18px;font-weight:700;letter-spacing:2px}
+.modal-title.danger{color:var(--accent3)}
+.modal-text{font-size:13px;color:var(--muted);line-height:1.5}
+.modal-btns{display:flex;gap:8px}
+.modal-btn{flex:1;padding:10px;border-radius:7px;border:none;cursor:pointer;font-family:'Rajdhani',sans-serif;font-size:15px;font-weight:700}
+.modal-btn.ok{background:linear-gradient(135deg,var(--accent2),var(--accent));color:#fff}
+.modal-btn.danger{background:var(--accent3);color:#fff}
+.modal-btn.cancel{background:var(--card);color:var(--muted);border:1px solid var(--border)}
+
+.toast{position:fixed;bottom:20px;right:20px;background:var(--card);border:1px solid var(--accent);border-radius:8px;padding:10px 16px;font-family:'Share Tech Mono',monospace;font-size:12px;color:var(--text);z-index:9998;opacity:0;transition:opacity .3s;pointer-events:none}
+.toast.show{opacity:1}
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="loginWrap">
+  <div class="login-box">
+    <div class="logo">VA<span>X</span></div>
+    <div class="logo-sub">// ADMIN PANEL</div>
+    <input class="inp" id="passInp" type="password" placeholder="Введи пароль адміна..." onkeydown="if(event.key==='Enter')adminLogin()">
+    <button class="btn" onclick="adminLogin()">УВІЙТИ</button>
+    <div class="err" id="loginErr"></div>
+  </div>
+</div>
+
+<!-- ADMIN -->
+<div id="adminWrap">
+  <div class="topbar">
+    <div class="topbar-logo">VA<span>X</span></div>
+    <div class="badge">АДМІН</div>
+    <div style="font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--muted)" id="lastUpdated"></div>
+    <button class="logout-btn" onclick="logout()">Вийти</button>
+  </div>
+
+  <!-- STATS -->
+  <div class="stats-row">
+    <div class="stat-card"><div class="stat-num" id="statOnline">0</div><div class="stat-label">ОНЛАЙН</div></div>
+    <div class="stat-card"><div class="stat-num" id="statTotal">0</div><div class="stat-label">ВСЬОГО ЮЗЕРІВ</div></div>
+    <div class="stat-card"><div class="stat-num" id="statGroups">0</div><div class="stat-label">ГРУП</div></div>
+  </div>
+
+  <!-- USERS -->
+  <div class="section">
+    <div class="section-title">
+      КОРИСТУВАЧІ
+      <button class="refresh-btn" onclick="loadStats()">↻ Оновити</button>
+    </div>
+    <table class="tbl">
+      <thead><tr><th>КОРИСТУВАЧ</th><th>ID</th><th>СТАТУС</th><th>ДІЇ</th></tr></thead>
+      <tbody id="usersTable"></tbody>
+    </table>
+  </div>
+
+  <!-- GROUPS -->
+  <div class="section">
+    <div class="section-title">ГРУПИ</div>
+    <table class="tbl">
+      <thead><tr><th>ГРУПА</th><th>УЧАСНИКІВ</th><th>ПОВІДОМЛЕНЬ</th><th>ДІЇ</th></tr></thead>
+      <tbody id="groupsTable"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- BAN MODAL -->
+<div class="modal-overlay" id="banModal">
+  <div class="modal">
+    <div class="modal-title danger">ЗАБЛОКУВАТИ</div>
+    <div class="modal-text">Заблокувати користувача <strong id="banName"></strong>? Він буде відключений і не зможе зайти з цим ID.</div>
+    <div class="modal-btns">
+      <button class="modal-btn cancel" onclick="closeModal('banModal')">Скасувати</button>
+      <button class="modal-btn danger" onclick="confirmBan()">Заблокувати</button>
+    </div>
+  </div>
+</div>
+
+<!-- DELETE GROUP MODAL -->
+<div class="modal-overlay" id="delGroupModal">
+  <div class="modal">
+    <div class="modal-title danger">ВИДАЛИТИ ГРУПУ</div>
+    <div class="modal-text">Видалити групу <strong id="delGroupName"></strong>? Всі повідомлення будуть втрачені.</div>
+    <div class="modal-btns">
+      <button class="modal-btn cancel" onclick="closeModal('delGroupModal')">Скасувати</button>
+      <button class="modal-btn danger" onclick="confirmDelGroup()">Видалити</button>
+    </div>
+  </div>
+</div>
+
+<!-- RENAME GROUP MODAL -->
+<div class="modal-overlay" id="renameGroupModal">
+  <div class="modal">
+    <div class="modal-title">ПЕРЕЙМЕНУВАТИ ГРУПУ</div>
+    <input class="inp" id="renameGroupInp" placeholder="Нова назва..." maxlength="32" style="margin-top:4px">
+    <div class="modal-btns">
+      <button class="modal-btn cancel" onclick="closeModal('renameGroupModal')">Скасувати</button>
+      <button class="modal-btn ok" onclick="confirmRenameGroup()">Зберегти</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+let pass = '';
+let banTarget = null;
+let delGroupTarget = null;
+let renameGroupTarget = null;
+
+function adminLogin(){
+  const p = document.getElementById('passInp').value;
+  fetch('/api/admin/login', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ password: p }) })
+    .then(r => r.json())
+    .then(d => {
+      if(d.ok){ pass=p; document.getElementById('loginWrap').style.display='none'; document.getElementById('adminWrap').style.display='block'; loadStats(); setInterval(loadStats, 15000); }
+      else { document.getElementById('loginErr').textContent = 'Невірний пароль'; }
+    }).catch(()=>document.getElementById('loginErr').textContent='Помилка підключення');
+}
+
+function loadStats(){
+  fetch('/api/admin/stats', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ password: pass }) })
+    .then(r => r.json())
+    .then(d => {
+      if(!d.ok) return;
+      const s = d.stats;
+      document.getElementById('statOnline').textContent = s.onlineCount;
+      document.getElementById('statTotal').textContent = s.totalUsers;
+      document.getElementById('statGroups').textContent = s.groupCount;
+      document.getElementById('lastUpdated').textContent = 'Оновлено: ' + new Date().toLocaleTimeString('uk-UA', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+      renderUsers(s.users);
+      renderGroups(s.groups);
+    });
+}
+
+function renderUsers(users){
+  const tb = document.getElementById('usersTable');
+  if(!users.length){ tb.innerHTML='<tr><td colspan="4" style="color:var(--dim);font-family:Share Tech Mono,monospace;font-size:11px;text-align:center;padding:20px">Немає користувачів</td></tr>'; return; }
+  tb.innerHTML = users.map(u => `
+    <tr>
+      <td><span class="user-av" style="background:${u.color}">${u.name.slice(0,2).toUpperCase()}</span>${esc(u.name)}</td>
+      <td style="font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--muted)">${u.id}</td>
+      <td><span class="online-pill ${u.online?'on':'off'}">${u.online?'● ОНЛАЙН':'○ ОФЛАЙН'}</span></td>
+      <td><button class="action-btn" onclick="openBan('${u.id}','${esc(u.name)}')">🚫 Бан</button></td>
+    </tr>`).join('');
+}
+
+function renderGroups(grps){
+  const tb = document.getElementById('groupsTable');
+  if(!grps.length){ tb.innerHTML='<tr><td colspan="4" style="color:var(--dim);font-family:Share Tech Mono,monospace;font-size:11px;text-align:center;padding:20px">Немає груп</td></tr>'; return; }
+  tb.innerHTML = grps.map(g => `
+    <tr>
+      <td>${g.emoji||'💬'} <strong>${esc(g.name)}</strong> ${g.isDefault?'<span style="font-size:10px;color:var(--dim);font-family:Share Tech Mono,monospace">(стандартна)</span>':''}</td>
+      <td style="font-family:'Share Tech Mono',monospace">${g.memberCount}</td>
+      <td style="font-family:'Share Tech Mono',monospace">${g.msgCount}</td>
+      <td style="display:flex;gap:6px">
+        <button class="action-btn edit" onclick="openRenameGroup('${g.id}','${esc(g.name)}')">✏️ Змінити</button>
+        ${!g.isDefault?`<button class="action-btn" onclick="openDelGroup('${g.id}','${esc(g.name)}')">🗑 Видалити</button>`:''}
+      </td>
+    </tr>`).join('');
+}
+
+// BAN
+function openBan(id, name){ banTarget=id; document.getElementById('banName').textContent=name; openModal('banModal'); }
+function confirmBan(){
+  fetch('/api/admin/ban', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ password:pass, userId:banTarget }) })
+    .then(r=>r.json()).then(d=>{ if(d.ok){ toast('Користувача заблоковано'); closeModal('banModal'); loadStats(); } });
+}
+
+// DELETE GROUP
+function openDelGroup(id, name){ delGroupTarget=id; document.getElementById('delGroupName').textContent=name; openModal('delGroupModal'); }
+function confirmDelGroup(){
+  fetch('/api/admin/delete-group', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ password:pass, groupId:delGroupTarget }) })
+    .then(r=>r.json()).then(d=>{ if(d.ok){ toast('Групу видалено'); closeModal('delGroupModal'); loadStats(); } });
+}
+
+// RENAME GROUP
+function openRenameGroup(id, name){ renameGroupTarget=id; document.getElementById('renameGroupInp').value=name; openModal('renameGroupModal'); setTimeout(()=>document.getElementById('renameGroupInp').focus(),50); }
+function confirmRenameGroup(){
+  const name = document.getElementById('renameGroupInp').value.trim(); if(!name) return;
+  fetch('/api/admin/rename-group', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ password:pass, groupId:renameGroupTarget, name }) })
+    .then(r=>r.json()).then(d=>{ if(d.ok){ toast('Групу перейменовано'); closeModal('renameGroupModal'); loadStats(); } });
+}
+
+function logout(){ pass=''; document.getElementById('loginWrap').style.display='flex'; document.getElementById('adminWrap').style.display='none'; document.getElementById('passInp').value=''; }
+function openModal(id){ document.getElementById(id).classList.add('open'); }
+function closeModal(id){ document.getElementById(id).classList.remove('open'); }
+function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),3000); }
+
+document.getElementById('passInp').addEventListener('keydown', e => { if(e.key==='Enter') adminLogin(); });
+document.querySelectorAll('.modal-overlay').forEach(m => m.addEventListener('click', e => { if(e.target===m) m.classList.remove('open'); }));
+</script>
+</body>
+</html>
