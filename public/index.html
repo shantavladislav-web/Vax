@@ -434,6 +434,12 @@ function handle(msg){
       renderHome();
       break;
 
+    case 'banned':
+      alert('❌ Тебе заблокував адміністратор VAX');
+      if(ws) ws.close();
+      showScreen('loginScreen');
+      break;
+
     case 'contact_online':
       contacts[msg.user.id]={...contacts[msg.user.id],...msg.user,online:true};
       renderHome();
