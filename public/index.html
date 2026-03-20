@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VAX Messenger</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;700&family=Share+Tech+Mono&family=Exo+2:wght@300;400;600&display=swap');
+
+:root {
+  --bg:      #050810;
+  --panel:   #080d1a;
+  --card:    #0c1428;
+  --hover:   #111e3a;
+  --accent:  #00e5ff;
+  --accent2: #7b2fff;
+  --accent3: #ff2d78;
+  --green:   #00ff88;
+  --text:    #e8f0ff;
+  --muted:   #4a6080;
+  --dim:     #2a3a55;
+  --border:  #1a2a45;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%;overflow:hidden}
+body{font-family:'Exo 2',sans-serif;background:var(--bg);color:var(--text);display:flex;flex-direction:column}
+body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,.06) 2px,rgba(0,0,0,.06) 4px);pointer-events:none;z-index:9999}
+
+/* ── LOGIN ── */
+#loginScreen{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;z-index:100;flex-direction:column;gap:0}
+.login-box{background:var(--panel);border:1px solid var(--border);border-radius:16px;padding:40px 44px;width:340px;display:flex;flex-direction:column;gap:20px;box-shadow:0 0 60px rgba(0,229,255,.07)}
+.login-logo{font-family:'Rajdhani',sans-serif;font-size:48px;font-weight:700;letter-spacing:14px;color:var(--accent);text-shadow:0 0 30px rgba(0,229,255,.5);text-align:center}
+.login-logo span{color:var(--accent3);text-shadow:0 0 30px rgba(255,45,120,.5)}
+.login-sub{font-family:'Share Tech Mono',monospace;font-size:11px;letter-spacing:3px;color:var(--dim);text-align:center;margin-top:-12px}
+.login-label{font-size:11px;letter-spacing:2px;color:var(--muted);font-family:'Share Tech Mono',monospace;text-transform:uppercase}
+.login-input{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:11px 14px;color:var(--text);font-family:'Exo 2',sans-serif;font-size:15px;outline:none;width:100%;transition:border-color .2s}
+.login-input:focus{border-color:var(--accent);box-shadow:0 0 0 2px rgba(0,229,255,.1)}
+.login-btn{background:linear-gradient(135deg,var(--accent2),var(--accent));border:none;border-radius:8px;padding:13px;color:#fff;font-family:'Rajdhani',sans-serif;font-size:17px;font-weight:700;letter-spacing:3px;cursor:pointer;transition:all .15s;box-shadow:0 0 20px rgba(0,229,255,.2)}
+.login-btn:hover{transform:scale(1.02);box-shadow:0 0 30px rgba(0,229,255,.35)}
+.login-btn:active{transform:scale(.98)}
+
+/* ── TOP BAR ── */
+.topbar{display:flex;align-items:center;padding:0 20px;height:52px;background:var(--panel);border-bottom:1px solid var(--border);flex-shrink:0;position:relative;gap:12px}
+.topbar::after{content:'';position:absolute;bottom:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,var(--accent),transparent);opacity:.4}
+.logo{font-family:'Rajdhani',sans-serif;font-size:24px;font-weight:700;letter-spacing:8px;color:var(--accent);text-shadow:0 0 20px rgba(0,229,255,.5)}
+.logo span{color:var(--accent3)}
+.conn-badge{font-family:'Share Tech Mono',monospace;font-size:10px;letter-spacing:2px;padding:3px 8px;border-radius:4px;border:1px solid var(--dim);color:var(--dim)}
+.conn-badge.ok{color:var(--green);border-color:var(--green);box-shadow:0 0 8px rgba(0,255,136,.2)}
+.conn-badge.err{color:var(--accent3);border-color:var(--accent3)}
+.topbar-right{margin-left:auto;display:flex;align-items:center;gap:10px}
+.my-name{font-family:'Share Tech Mono',monospace;font-size:12px;color:var(--muted)}
+.my-avatar{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:'Rajdhani',sans-serif;font-weight:700;font-size:13px;color:#fff;border:1px solid rgba(255,255,255,.15)}
+
+/* ── LAYOUT ── */
+.main{display:flex;flex:1;overflow:hidden}
+
+/* ── SIDEBAR ── */
+.sidebar{width:240px;background:var(--panel);border-right:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0}
+.sec-label{padding:12px 14px 6px;font-family:'Share Tech Mono',monospace;font-size:10px;letter-spacing:3px;color:var(--dim)}
+.room-list{display:flex;flex-direction:column;gap:2px;padding:0 8px}
+.room-item{display:flex;align-items:center;gap:8px;padding:9px 10px;border-radius:8px;cursor:pointer;border:1px solid transparent;transition:all .15s;font-size:14px;color:var(--muted)}
+.room-item:hover{background:var(--hover);color:var(--text)}
+.room-item.active{background:var(--card);border-color:var(--border);color:var(--accent)}
+.room-hash{font-family:'Share Tech Mono',monospace;font-size:16px;color:var(--dim)}
+.room-item.active .room-hash{color:var(--accent)}
+.room-count{margin-left:auto;font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--dim)}
+.new-room-btn{margin:8px;padding:8px 10px;background:none;border:1px dashed var(--border);border-radius:8px;color:var(--dim);font-size:13px;cursor:pointer;font-family:'Exo 2',sans-serif;transition:all .15s;text-align:left}
+.new-room-btn:hover{border-color:var(--accent2);color:var(--accent2)}
+
+.sec-label-members{padding:12px 14px 6px;font-family:'Share Tech Mono',monospace;font-size:10px;letter-spacing:3px;color:var(--dim);margin-top:8px;border-top:1px solid var(--border)}
+.member-list{flex:1;overflow-y:auto;padding:0 8px 8px;scrollbar-width:thin;scrollbar-color:var(--border) transparent}
+.member-item{display:flex;align-items:center;gap:8px;padding:6px 6px;border-radius:6px}
+.m-avatar{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:'Rajdhani',sans-serif;font-weight:700;font-size:11px;color:#fff;flex-shrink:0;position:relative}
+.m-avatar::after{content:'';position:absolute;bottom:0;right:0;width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 5px var(--green);border:1.5px solid var(--panel)}
+.m-name{font-size:13px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.m-name.me{color:var(--text)}
+
+/* ── CHAT ── */
+.chat-area{flex:1;display:flex;flex-direction:column;overflow:hidden;background:var(--bg);background-image:radial-gradient(ellipse at 20% 50%,rgba(123,47,255,.04) 0%,transparent 60%),radial-gradient(ellipse at 80% 20%,rgba(0,229,255,.04) 0%,transparent 50%)}
+
+.chat-header{display:flex;align-items:center;padding:12px 24px;border-bottom:1px solid var(--border);background:var(--panel);gap:10px;flex-shrink:0}
+.ch-hash{font-family:'Share Tech Mono',monospace;font-size:22px;color:var(--accent);text-shadow:0 0 10px rgba(0,229,255,.4)}
+.ch-name{font-family:'Rajdhani',sans-serif;font-size:18px;font-weight:700;letter-spacing:1px}
+.ch-count{font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--green);margin-left:auto;display:flex;align-items:center;gap:5px}
+.ch-dot{width:6px;height:6px;border-radius:50%;background:var(--green);box-shadow:0 0 6px var(--green);animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+
+.messages{flex:1;overflow-y:auto;padding:20px 24px;display:flex;flex-direction:column;gap:4px;scrollbar-width:thin;scrollbar-color:var(--border) transparent}
+
+.date-div{display:flex;align-items:center;gap:10px;margin:12px 0 8px}
+.date-div::before,.date-div::after{content:'';flex:1;height:1px;background:var(--border)}
+.date-div span{font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--dim);letter-spacing:2px}
+
+.msg-row{display:flex;gap:10px;padding:2px 0;align-items:flex-start}
+.msg-row:hover{background:rgba(255,255,255,.01);border-radius:8px}
+.msg-row.continuation{padding-left:42px}
+
+.msg-av{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:'Rajdhani',sans-serif;font-weight:700;font-size:12px;color:#fff;flex-shrink:0;margin-top:2px}
+.msg-body{}
+.msg-meta{display:flex;align-items:baseline;gap:8px;margin-bottom:2px}
+.msg-name{font-size:13px;font-weight:600}
+.msg-time{font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--dim)}
+.msg-text{font-size:14px;line-height:1.55;color:var(--text);word-break:break-word}
+.msg-text.mine-text{color:#c8dfff}
+
+.typing-bar{padding:8px 24px;font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--muted);min-height:26px;display:flex;align-items:center;gap:6px}
+.t-dots span{display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--muted);animation:bounce 1.2s infinite;margin-right:2px}
+.t-dots span:nth-child(2){animation-delay:.2s}
+.t-dots span:nth-child(3){animation-delay:.4s}
+@keyframes bounce{0%,60%,100%{transform:translateY(0)}30%{transform:translateY(-4px)}}
+
+/* INPUT */
+.input-area{padding:14px 24px 16px;border-top:1px solid var(--border);background:var(--panel);display:flex;gap:10px;flex-shrink:0}
+.input-wrap{flex:1;background:var(--card);border:1px solid var(--border);border-radius:10px;display:flex;align-items:center;padding:0 14px;gap:8px;transition:border-color .2s,box-shadow .2s}
+.input-wrap:focus-within{border-color:var(--accent);box-shadow:0 0 0 2px rgba(0,229,255,.08)}
+.msg-input{flex:1;background:none;border:none;outline:none;color:var(--text);font-family:'Exo 2',sans-serif;font-size:14px;padding:12px 0;resize:none;max-height:120px;line-height:1.5}
+.msg-input::placeholder{color:var(--dim)}
+.send-btn{width:42px;height:42px;border-radius:9px;background:linear-gradient(135deg,var(--accent2),var(--accent));border:none;color:#fff;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 0 14px rgba(0,229,255,.2);transition:all .15s}
+.send-btn:hover{transform:scale(1.05);box-shadow:0 0 22px rgba(0,229,255,.4)}
+.send-btn:active{transform:scale(.97)}
+
+/* TOAST */
+.toast{position:fixed;bottom:24px;right:24px;background:var(--card);border:1px solid var(--accent);border-radius:8px;padding:10px 16px;font-family:'Share Tech Mono',monospace;font-size:12px;color:var(--text);box-shadow:0 4px 24px rgba(0,229,255,.15);z-index:9998;opacity:0;transition:opacity .3s;pointer-events:none}
+.toast.show{opacity:1}
+
+/* MODAL */
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.7);display:none;align-items:center;justify-content:center;z-index:200}
+.modal.open{display:flex}
+.modal-box{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:28px;width:300px;display:flex;flex-direction:column;gap:16px}
+.modal-title{font-family:'Rajdhani',sans-serif;font-size:18px;font-weight:700;letter-spacing:2px;color:var(--accent)}
+.modal-input{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);font-family:'Exo 2',sans-serif;font-size:14px;outline:none;width:100%}
+.modal-input:focus{border-color:var(--accent)}
+.modal-btns{display:flex;gap:8px}
+.modal-btn{flex:1;padding:10px;border-radius:7px;border:none;cursor:pointer;font-family:'Rajdhani',sans-serif;font-size:15px;font-weight:700;letter-spacing:1px;transition:all .15s}
+.modal-btn.confirm{background:linear-gradient(135deg,var(--accent2),var(--accent));color:#fff}
+.modal-btn.cancel{background:var(--card);color:var(--muted);border:1px solid var(--border)}
+.modal-btn:hover{transform:scale(1.02)}
+
+::-webkit-scrollbar{width:3px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+@keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+.fadein{animation:fadeUp .2s ease}
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="loginScreen">
+  <div class="login-box">
+    <div class="login-logo">VA<span>X</span></div>
+    <div class="login-sub">// SECURE MESSENGER</div>
+    <div>
+      <div class="login-label" style="margin-bottom:7px">Твій нікнейм</div>
+      <input class="login-input" id="nameInput" placeholder="Введи нікнейм..." maxlength="24" autofocus>
+    </div>
+    <div>
+      <div class="login-label" style="margin-bottom:7px">Кімната</div>
+      <input class="login-input" id="roomInput" placeholder="Загальний" maxlength="32">
+    </div>
+    <button class="login-btn" onclick="doLogin()">УВІЙТИ →</button>
+  </div>
+</div>
+
+<!-- TOPBAR -->
+<div class="topbar">
+  <div class="logo">VA<span>X</span></div>
+  <div class="conn-badge" id="connBadge">ПІДКЛЮЧЕННЯ...</div>
+  <div class="topbar-right">
+    <span class="my-name" id="myNameTag"></span>
+    <div class="my-avatar" id="myAvatar"></div>
+  </div>
+</div>
+
+<!-- MAIN -->
+<div class="main">
+  <div class="sidebar">
+    <div class="sec-label">// КІМНАТИ</div>
+    <div class="room-list" id="roomList"></div>
+    <button class="new-room-btn" onclick="openCreateRoom()">＋ Нова кімната</button>
+    <div class="sec-label-members">// ОНЛАЙН</div>
+    <div class="member-list" id="memberList"></div>
+  </div>
+
+  <div class="chat-area">
+    <div class="chat-header">
+      <span class="ch-hash">#</span>
+      <span class="ch-name" id="chName">—</span>
+      <span class="ch-count"><span class="ch-dot"></span><span id="chCount">0 онлайн</span></span>
+    </div>
+    <div class="messages" id="messages">
+      <div class="date-div"><span>СЬОГОДНІ</span></div>
+    </div>
+    <div class="typing-bar" id="typingBar"></div>
+    <div class="input-area">
+      <div class="input-wrap">
+        <textarea class="msg-input" id="msgInput" placeholder="Написати повідомлення..." rows="1"
+          onkeydown="handleKey(event)" oninput="onTyping(this)"></textarea>
+      </div>
+      <button class="send-btn" onclick="sendMsg()">➤</button>
+    </div>
+  </div>
+</div>
+
+<!-- CREATE ROOM MODAL -->
+<div class="modal" id="createRoomModal">
+  <div class="modal-box">
+    <div class="modal-title">НОВА КІМНАТА</div>
+    <input class="modal-input" id="newRoomInput" placeholder="Назва кімнати..." maxlength="32" onkeydown="if(event.key==='Enter')confirmCreateRoom()">
+    <div class="modal-btns">
+      <button class="modal-btn cancel" onclick="closeCreateRoom()">Скасувати</button>
+      <button class="modal-btn confirm" onclick="confirmCreateRoom()">Створити</button>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ── STATE ──────────────────────────────────────────────
+let ws = null;
+let me = null;
+let currentRoom = null;
+let typingTimeout = null;
+let typingUsers = {};
+let lastSender = null;
+let lastMsgTime = null;
+
+// ── LOGIN ──────────────────────────────────────────────
+document.getElementById('nameInput').addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('roomInput').focus(); });
+document.getElementById('roomInput').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+
+function doLogin() {
+  const name = document.getElementById('nameInput').value.trim();
+  if (!name) { shake('nameInput'); return; }
+  const room = document.getElementById('roomInput').value.trim() || 'Загальний';
+  connect(name, room);
+}
+
+function shake(id) {
+  const el = document.getElementById(id);
+  el.style.borderColor = 'var(--accent3)';
+  setTimeout(() => el.style.borderColor = '', 800);
+}
+
+// ── WEBSOCKET ──────────────────────────────────────────
+function connect(name, room) {
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  ws = new WebSocket(`${proto}://${location.host}`);
+
+  ws.onopen = () => {
+    ws.send(JSON.stringify({ type: 'join', name, room }));
+  };
+
+  ws.onmessage = ({ data }) => {
+    const msg = JSON.parse(data);
+    handleMsg(msg);
+  };
+
+  ws.onclose = () => {
+    document.getElementById('connBadge').textContent = 'ВІДКЛЮЧЕНО';
+    document.getElementById('connBadge').className = 'conn-badge err';
+    toast('Зʼєднання розірвано. Оновіть сторінку.');
+  };
+
+  ws.onerror = () => toast('Помилка підключення');
+}
+
+function handleMsg(msg) {
+  switch (msg.type) {
+
+    case 'init':
+      me = msg.user;
+      currentRoom = msg.room;
+      document.getElementById('loginScreen').style.display = 'none';
+      document.getElementById('connBadge').textContent = 'ОНЛАЙН';
+      document.getElementById('connBadge').className = 'conn-badge ok';
+      document.getElementById('myNameTag').textContent = '@' + me.name;
+      const av = document.getElementById('myAvatar');
+      av.style.background = me.color;
+      av.textContent = initials(me.name);
+      renderRooms(msg.rooms);
+      renderMembers(msg.members);
+      renderHistory(msg.history);
+      document.getElementById('chName').textContent = currentRoom;
+      updateCount(msg.members.length);
+      break;
+
+    case 'message':
+      appendMsg(msg.msg);
+      break;
+
+    case 'user_joined':
+      renderRooms(msg.rooms);
+      renderMembers(msg.members);
+      updateCount(msg.members.length);
+      if (msg.user.id !== me?.id) {
+        appendSystem(`${msg.user.name} приєднався до кімнати`);
+      }
+      break;
+
+    case 'user_left':
+      renderRooms(msg.rooms);
+      renderMembers(msg.members);
+      updateCount(msg.members.length);
+      delete typingUsers[msg.userId];
+      renderTyping();
+      break;
+
+    case 'room_switched':
+      currentRoom = msg.room;
+      document.getElementById('chName').textContent = currentRoom;
+      renderRooms(msg.rooms);
+      renderMembers(msg.members);
+      renderHistory(msg.history);
+      updateCount(msg.members.length);
+      lastSender = null; lastMsgTime = null;
+      break;
+
+    case 'rooms_updated':
+      renderRooms(msg.rooms);
+      break;
+
+    case 'typing':
+      if (msg.userId !== me?.id) {
+        typingUsers[msg.userId] = msg.name;
+        renderTyping();
+        clearTimeout(typingTimeout);
+        typingTimeout = setTimeout(() => { delete typingUsers[msg.userId]; renderTyping(); }, 2500);
+      }
+      break;
+
+    case 'error':
+      toast(msg.text);
+      break;
+  }
+}
+
+// ── RENDER ──────────────────────────────────────────────
+function renderRooms(rooms) {
+  const el = document.getElementById('roomList');
+  el.innerHTML = rooms.map(r => `
+    <div class="room-item${r.name === currentRoom ? ' active' : ''}" onclick="switchRoom('${esc(r.name)}')">
+      <span class="room-hash">#</span>
+      <span>${esc(r.name)}</span>
+      ${r.count > 0 ? `<span class="room-count">${r.count}</span>` : ''}
+    </div>`).join('');
+}
+
+function renderMembers(members) {
+  const el = document.getElementById('memberList');
+  el.innerHTML = members.map(m => `
+    <div class="member-item">
+      <div class="m-avatar" style="background:${m.color}">${initials(m.name)}</div>
+      <span class="m-name${m.id === me?.id ? ' me' : ''}">${esc(m.name)}${m.id === me?.id ? ' (ти)' : ''}</span>
+    </div>`).join('');
+}
+
+function renderHistory(history) {
+  const el = document.getElementById('messages');
+  el.innerHTML = '<div class="date-div fadein"><span>СЬОГОДНІ</span></div>';
+  lastSender = null; lastMsgTime = null;
+  history.forEach(m => appendMsg(m, false));
+  scrollBottom();
+}
+
+function appendMsg(msg, doScroll = true) {
+  const el = document.getElementById('messages');
+  const isMe = msg.from.id === me?.id;
+  const time = fmtTime(msg.time);
+  const sameAuthor = lastSender === msg.from.id;
+  lastSender = msg.from.id;
+  lastMsgTime = msg.time;
+
+  const div = document.createElement('div');
+  div.className = 'msg-row fadein' + (sameAuthor ? ' continuation' : '');
+
+  if (!sameAuthor) {
+    div.innerHTML = `
+      <div class="msg-av" style="background:${msg.from.color}">${initials(msg.from.name)}</div>
+      <div class="msg-body">
+        <div class="msg-meta">
+          <span class="msg-name" style="color:${msg.from.color}">${esc(msg.from.name)}</span>
+          <span class="msg-time">${time}</span>
+        </div>
+        <div class="msg-text${isMe ? ' mine-text' : ''}">${linkify(esc(msg.text))}</div>
+      </div>`;
+  } else {
+    div.innerHTML = `<div class="msg-text${isMe ? ' mine-text' : ''}" style="padding-left:0">${linkify(esc(msg.text))}</div>`;
+  }
+
+  el.appendChild(div);
+  if (doScroll) scrollBottom();
+}
+
+function appendSystem(text) {
+  const el = document.getElementById('messages');
+  const div = document.createElement('div');
+  div.style.cssText = 'text-align:center;font-family:Share Tech Mono,monospace;font-size:11px;color:var(--dim);padding:6px 0';
+  div.textContent = '— ' + text + ' —';
+  el.appendChild(div);
+  lastSender = null;
+  scrollBottom();
+}
+
+function renderTyping() {
+  const bar = document.getElementById('typingBar');
+  const names = Object.values(typingUsers);
+  if (!names.length) { bar.innerHTML = ''; return; }
+  bar.innerHTML = `<span class="t-dots"><span></span><span></span><span></span></span> <span>${esc(names.join(', '))} друкує...</span>`;
+}
+
+function updateCount(n) {
+  document.getElementById('chCount').textContent = n + ' онлайн';
+}
+
+// ── SEND ──────────────────────────────────────────────
+function sendMsg() {
+  const input = document.getElementById('msgInput');
+  const text = input.value.trim();
+  if (!text || !ws || ws.readyState !== 1) return;
+  ws.send(JSON.stringify({ type: 'message', text }));
+  input.value = '';
+  input.style.height = '';
+}
+
+function handleKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMsg(); }
+}
+
+let typingSent = false;
+function onTyping(el) {
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+  if (!typingSent && ws && ws.readyState === 1) {
+    ws.send(JSON.stringify({ type: 'typing' }));
+    typingSent = true;
+    setTimeout(() => typingSent = false, 2000);
+  }
+}
+
+// ── ROOMS ──────────────────────────────────────────────
+function switchRoom(name) {
+  if (name === currentRoom) return;
+  ws.send(JSON.stringify({ type: 'switch_room', room: name }));
+}
+
+function openCreateRoom() {
+  document.getElementById('createRoomModal').classList.add('open');
+  setTimeout(() => document.getElementById('newRoomInput').focus(), 50);
+}
+function closeCreateRoom() {
+  document.getElementById('createRoomModal').classList.remove('open');
+  document.getElementById('newRoomInput').value = '';
+}
+function confirmCreateRoom() {
+  const name = document.getElementById('newRoomInput').value.trim();
+  if (!name) return;
+  ws.send(JSON.stringify({ type: 'create_room', name }));
+  closeCreateRoom();
+  setTimeout(() => switchRoom(name), 300);
+}
+
+// ── UTILS ──────────────────────────────────────────────
+function initials(name) { return name.slice(0, 2).toUpperCase(); }
+function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function scrollBottom() { const e = document.getElementById('messages'); e.scrollTop = e.scrollHeight; }
+function fmtTime(iso) {
+  try { return new Date(iso).toLocaleTimeString('uk-UA',{hour:'2-digit',minute:'2-digit'}); } catch { return ''; }
+}
+function linkify(s) {
+  return s.replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:none">$1</a>');
+}
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+// Close modal on backdrop click
+document.getElementById('createRoomModal').addEventListener('click', function(e) {
+  if (e.target === this) closeCreateRoom();
+});
+</script>
+</body>
+</html>
