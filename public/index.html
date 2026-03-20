@@ -632,8 +632,14 @@ function sendMsg(){
     if(groups[currentChat.id]) groups[currentChat.id].lastMsg=msg;
     renderHome();
   } else {
-    // DM: server echoes back to sender via dm_msg, so DON'T append locally
+    // DM: server does NOT echo back to sender, show locally
     ws.send(JSON.stringify({type:'dm',toId:currentChat.id,text}));
+    const msg={id:'t'+Date.now(),from:{id:me.id,name:me.name,color:me.color},text,time:new Date().toISOString(),msgType:'text'};
+    appendMsg(msg);
+    if(!dmHistories[currentChat.id]) dmHistories[currentChat.id]=[];
+    dmHistories[currentChat.id].push(msg);
+    saveDm(currentChat.id, dmHistories[currentChat.id]);
+    renderHome();
   }
   inp.value=''; inp.style.height='';
 }
@@ -661,8 +667,13 @@ function sendImg(inp){
       const msg={id:'t'+Date.now(),from:{id:me.id,name:me.name,color:me.color},imageData,time:new Date().toISOString(),msgType:'image'};
       appendMsg(msg);
     } else {
-      // DM: server echoes back, don't append locally
       ws.send(JSON.stringify({type:'dm_img',toId:currentChat.id,imageData}));
+      // DM: server does NOT echo back, show locally
+      const msg={id:'t'+Date.now(),from:{id:me.id,name:me.name,color:me.color},imageData,time:new Date().toISOString(),msgType:'image'};
+      appendMsg(msg);
+      if(!dmHistories[currentChat.id]) dmHistories[currentChat.id]=[];
+      dmHistories[currentChat.id].push(msg);
+      saveDm(currentChat.id,dmHistories[currentChat.id]);
     }
   };
   r.readAsDataURL(file);
