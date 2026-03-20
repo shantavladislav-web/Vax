@@ -66,6 +66,52 @@ function getAllContacts() {
 // Using browser push API requires VAPID keys - we use a simpler approach:
 // Store subscriptions server-side, send via the push service
 
+app.get('/admin', (req, res) => res.sendFile(path.join(__dirname, 'public', 'admin.html')));
+
+// ── ADMIN PASSWORD ─────────────────────────────────────
+const ADMIN_PASS = process.env.ADMIN_PASS || '148800';
+
+app.post('/api/admin/login', (req, res) => {
+  if (req.body.password === ADMIN_PASS) res.json({ ok: true });
+  else res.status(403).json({ ok: false });
+});
+
+app.post('/api/admin/stats', (req, res) => {
+  if (req.body.password !== ADMIN_PASS) return res.status(403).json({ ok: false });
+  res.json({ ok: true, stats: {
+    onlineCount: [...sessions.values()].filter(s => s.ws && s.ws.readyState === 1).length,
+    totalUsers: sessions.size,
+    groupCount: groups.size,
+    users: [...sessions.entries()].map(([id, s]) => ({ id, name: s.name, color: s.color, online: !!(s.ws && s.ws.readyState === 1) })),
+    groups: [...groups.values()].map(g => ({ id: g.id, name: g.name, emoji: g.emoji, memberCount: g.members.length, msgCount: g.messages.length, isDefault: g.isDefault })),
+  }});
+});
+
+app.post('/api/admin/ban', (req, res) => {
+  if (req.body.password !== ADMIN_PASS) return res.status(403).json({ ok: false });
+  const s = sessions.get(req.body.userId);
+  if (s && s.ws) { send(s.ws, { type: 'banned' }); s.ws.close(); }
+  sessions.delete(req.body.userId);
+  broadcastAll({ type: 'contact_offline', userId: req.body.userId });
+  res.json({ ok: true });
+});
+
+app.post('/api/admin/delete-group', (req, res) => {
+  if (req.body.password !== ADMIN_PASS) return res.status(403).json({ ok: false });
+  const g = groups.get(req.body.groupId); if (!g) return res.status(404).json({ ok: false });
+  const members = [...g.members]; groups.delete(req.body.groupId);
+  members.forEach(uid => sendTo(uid, { type: 'group_deleted', groupId: req.body.groupId }));
+  res.json({ ok: true });
+});
+
+app.post('/api/admin/rename-group', (req, res) => {
+  if (req.body.password !== ADMIN_PASS) return res.status(403).json({ ok: false });
+  const g = groups.get(req.body.groupId); if (!g) return res.status(404).json({ ok: false });
+  g.name = String(req.body.name || '').slice(0, 32).trim() || g.name;
+  broadcastAll({ type: 'group_updated', group: getGroupInfo(req.body.groupId) });
+  res.json({ ok: true });
+});
+
 // ── ROUTES ────────────────────────────────────────────
 // Save push subscription
 app.post('/api/push-subscribe', (req, res) => {
