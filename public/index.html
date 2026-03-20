@@ -141,6 +141,35 @@ body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradie
 ::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
 @keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
 .fadein{animation:fadeUp .2s ease}
+
+/* ── MOBILE BUTTON ── */
+.menu-btn{display:none;background:none;border:none;color:var(--accent);font-size:22px;cursor:pointer;padding:4px 8px;margin-right:4px}
+.sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:50}
+
+/* ── MOBILE ── */
+@media(max-width:640px){
+  .menu-btn{display:flex;align-items:center}
+  .my-name{display:none}
+  .conn-badge{font-size:9px;padding:2px 6px}
+
+  .sidebar{
+    position:fixed;top:52px;left:0;bottom:0;z-index:60;
+    transform:translateX(-100%);transition:transform .25s ease;
+    width:80vw;max-width:300px;
+  }
+  .sidebar.open{transform:translateX(0)}
+  .sidebar-overlay.open{display:block}
+
+  .chat-area{width:100%}
+  .messages{padding:12px 14px}
+  .chat-header{padding:10px 14px}
+  .input-area{padding:10px 12px 12px}
+  .typing-bar{padding:6px 14px}
+
+  .login-box{width:92vw;padding:28px 24px}
+  .login-logo{font-size:38px;letter-spacing:10px}
+  .modal-box{width:88vw;padding:22px}
+}
 </style>
 </head>
 <body>
@@ -164,6 +193,7 @@ body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradie
 
 <!-- TOPBAR -->
 <div class="topbar">
+  <button class="menu-btn" onclick="toggleSidebar()">☰</button>
   <div class="logo">VA<span>X</span></div>
   <div class="conn-badge" id="connBadge">ПІДКЛЮЧЕННЯ...</div>
   <div class="topbar-right">
@@ -172,9 +202,11 @@ body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradie
   </div>
 </div>
 
+<div class="sidebar-overlay" id="sidebarOverlay" onclick="toggleSidebar()"></div>
+
 <!-- MAIN -->
 <div class="main">
-  <div class="sidebar">
+  <div class="sidebar" id="sidebar">
     <div class="sec-label">// КІМНАТИ</div>
     <div class="room-list" id="roomList"></div>
     <button class="new-room-btn" onclick="openCreateRoom()">＋ Нова кімната</button>
@@ -441,9 +473,21 @@ function onTyping(el) {
 }
 
 // ── ROOMS ──────────────────────────────────────────────
+function toggleSidebar() {
+  document.getElementById('sidebar').classList.toggle('open');
+  document.getElementById('sidebarOverlay').classList.toggle('open');
+}
+
 function switchRoom(name) {
-  if (name === currentRoom) return;
+  if (name === currentRoom) { 
+    // close sidebar on mobile
+    document.getElementById('sidebar').classList.remove('open');
+    document.getElementById('sidebarOverlay').classList.remove('open');
+    return; 
+  }
   ws.send(JSON.stringify({ type: 'switch_room', room: name }));
+  document.getElementById('sidebar').classList.remove('open');
+  document.getElementById('sidebarOverlay').classList.remove('open');
 }
 
 function openCreateRoom() {
