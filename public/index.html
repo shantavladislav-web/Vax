@@ -397,12 +397,11 @@ function handle(msg){
       if(!dmHistories[dmId]) dmHistories[dmId]=loadDm(dmId);
       dmHistories[dmId].push(msg.msg);
       saveDm(dmId, dmHistories[dmId]);
-      // Update contact info if new
       if(msg.fromName && !contacts[dmId]) {
         contacts[dmId]={id:dmId,name:msg.fromName,color:msg.fromColor||'#00e5ff',online:true};
       }
       if(currentChat&&currentChat.type==='dm'&&currentChat.id===dmId){
-        appendMsg(msg.msg, false);
+        appendMsg(msg.msg, true);
       } else {
         unread[dmId]=(unread[dmId]||0)+1;
         renderHome();
@@ -624,22 +623,19 @@ function sendMsg(){
   const inp=document.getElementById('msgInp');
   const text=inp.value.trim(); if(!text||!ws||ws.readyState!==1) return;
   if(currentChat.type==='group'){
+    // Group: show locally (server does NOT echo back to sender)
     ws.send(JSON.stringify({type:'group_msg',groupId:currentChat.id,text}));
     const msg={id:'t'+Date.now(),from:{id:me.id,name:me.name,color:me.color},text,time:new Date().toISOString(),msgType:'text'};
     appendMsg(msg);
     if(!groupHistories[currentChat.id]) groupHistories[currentChat.id]=[];
     groupHistories[currentChat.id].push(msg);
     if(groups[currentChat.id]) groups[currentChat.id].lastMsg=msg;
+    renderHome();
   } else {
+    // DM: server echoes back to sender via dm_msg, so DON'T append locally
     ws.send(JSON.stringify({type:'dm',toId:currentChat.id,text}));
-    const msg={id:'t'+Date.now(),from:{id:me.id,name:me.name,color:me.color},text,time:new Date().toISOString(),msgType:'text'};
-    appendMsg(msg);
-    if(!dmHistories[currentChat.id]) dmHistories[currentChat.id]=[];
-    dmHistories[currentChat.id].push(msg);
-    saveDm(currentChat.id, dmHistories[currentChat.id]);
   }
   inp.value=''; inp.style.height='';
-  renderHome();
 }
 
 function handleKey(e){ if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMsg();} }
@@ -661,12 +657,13 @@ function sendImg(inp){
     const imageData=e.target.result;
     if(currentChat.type==='group'){
       ws.send(JSON.stringify({type:'group_img',groupId:currentChat.id,imageData}));
+      // Group: show locally (server does NOT echo back)
+      const msg={id:'t'+Date.now(),from:{id:me.id,name:me.name,color:me.color},imageData,time:new Date().toISOString(),msgType:'image'};
+      appendMsg(msg);
     } else {
+      // DM: server echoes back, don't append locally
       ws.send(JSON.stringify({type:'dm_img',toId:currentChat.id,imageData}));
     }
-    const msg={id:'t'+Date.now(),from:{id:me.id,name:me.name,color:me.color},imageData,time:new Date().toISOString(),msgType:'image'};
-    appendMsg(msg);
-    if(currentChat.type==='dm'){ if(!dmHistories[currentChat.id]) dmHistories[currentChat.id]=[]; dmHistories[currentChat.id].push(msg); saveDm(currentChat.id,dmHistories[currentChat.id]); }
   };
   r.readAsDataURL(file);
   inp.value='';
