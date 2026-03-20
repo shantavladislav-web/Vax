@@ -833,4 +833,10 @@ function openLb(src){ document.getElementById('lbImg').src=src; document.getElem
 // ── UTILS ─────────────────────────────────────────────
 function ini(n){ return String(n||'?').slice(0,2).toUpperCase(); }
 function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-function fmtTime(iso){ try{return new Date(iso).toLocaleTimeString('uk-UA',{hour:'2-digit',minute:'2-digit'});}catch{return '';} 
+function fmtTime(iso){ try{return new Date(iso).toLocaleTimeString('uk-UA',{hour:'2-digit',minute:'2-digit'});}catch{return '';} }
+function linkify(s){ return s.replace(/(https?:\/\/[^\s<]+)/g,'<a href="$1" target="_blank" rel="noopener" style="color:var(--accent)">$1</a>'); }
+function setBadge(txt,color){ const b=document.getElementById('connBadge'); b.textContent=txt; b.style.color=color; }
+function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),3000); }
+</script>
+</body>
+</html>
