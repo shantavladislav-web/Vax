@@ -789,26 +789,32 @@ function saveNewName(){
 function openNewChat(){ openSheet('newChat'); }
 
 // ── PUSH NOTIFICATIONS ────────────────────────────────
+// ── PUSH NOTIFICATIONS ────────────────────────────────
 async function requestPush(){
   try {
     if(!('Notification' in window)) return;
     const perm = await Notification.requestPermission();
-    if(perm !== 'granted') return;
-    if(!('serviceWorker' in navigator)) return;
-    const reg = await navigator.serviceWorker.ready;
-    // Subscribe to push (basic browser push without VAPID for simplicity)
-    // We use simple Notification API instead
-    console.log('Push ready');
+    if(perm !== 'granted'){ toast('Дозволь сповіщення в налаштуваннях браузера!'); return; }
+    console.log('Notifications granted');
   } catch(e){}
 }
 
-function notifyMsg(fromName, msg){
-  if(document.visibilityState==='visible') return; // already visible
+async function notifyMsg(fromName, msg){
+  if(document.visibilityState==='visible') return;
   if(!('Notification' in window)||Notification.permission!=='granted') return;
-  const body = msg.msgType==='image'?'📷 Фото':msg.text?.slice(0,80)||'';
+  const body = msg.msgType==='image'?'📷 Фото надіслано':msg.text?.slice(0,80)||'';
+  const title = 'VAX · ' + fromName;
   try {
-    new Notification('VAX · '+fromName, { body, icon:'/icons/icon-192.png', badge:'/icons/icon-192.png', tag: msg.from?.id||'vax' });
-  } catch(e){}
+    // Use Service Worker to show notification (works when app is in background)
+    if('serviceWorker' in navigator){
+      const reg = await navigator.serviceWorker.ready;
+      // Send message to SW
+      reg.active?.postMessage({ type:'NOTIFY', title, body, tag: msg.from?.id||'vax' });
+    } else {
+      // Fallback: direct notification
+      new Notification(title, { body, icon:'/icons/icon-192.png' });
+    }
+  } catch(e){ console.log('Notify error:', e); }
 }
 
 // ── SHEET / OVERLAY ───────────────────────────────────
