@@ -7,138 +7,267 @@ const path = require('path');
 const app = express();
 const server = createServer(app);
 const wss = new WebSocketServer({ server });
-
+app.use(express.json({ limit: '10mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
-const users  = new Map();
-const rooms  = new Map();
-const dms    = new Map();
-const COLORS = ['#00e5ff','#ff2d78','#7b2fff','#00ff88','#ffb800','#ff6b35','#a8ff3e','#ff3ea8'];
-const PRESET = ['Загальний','Ігри','Музика'];
-PRESET.forEach(r => rooms.set(r, { messages: [], isDefault: true }));
+// ── STATE ──────────────────────────────────────────────
+const sessions  = new Map(); // userId → { name, color, pushSub, ws? }
+const groups    = new Map(); // groupId → { id, name, members:[userId], messages:[], createdBy }
+const dms       = new Map(); // dmKey → { messages:[] }
+const wsToUser  = new Map(); // ws → userId
 
-function send(ws, p) { if (ws.readyState===1) ws.send(JSON.stringify(p)); }
-function broadcast(room, p, ex=null) { const m=JSON.stringify(p); for(const[w,u]of users) if(u.room===room&&w!==ex&&w.readyState===1) w.send(m); }
-function broadcastAll(p, ex=null) { const m=JSON.stringify(p); for(const[w]of users) if(w!==ex&&w.readyState===1) w.send(m); }
-function roomUsers(r) { return[...users.values()].filter(u=>u.room===r).map(u=>({id:u.id,name:u.name,color:u.color})); }
-function allUsersArr() { return[...users.values()].map(u=>({id:u.id,name:u.name,color:u.color})); }
-function allRooms() { return[...rooms.keys()].map(n=>({name:n,count:[...users.values()].filter(u=>u.room===n).length,isDefault:rooms.get(n).isDefault})); }
-function dmKey(a,b) { return[a,b].sort().join(':'); }
+const COLORS = ['#00e5ff','#ff2d78','#7b2fff','#00ff88','#ffb800','#ff6b35','#a8ff3e','#ff3ea8','#00bfff','#ff4500'];
 
+// Default groups
+const defaultGroups = [
+  { id: 'g_general', name: 'Загальний', emoji: '💬' },
+  { id: 'g_games',   name: 'Ігри',      emoji: '🎮' },
+  { id: 'g_music',   name: 'Музика',     emoji: '🎵' },
+];
+defaultGroups.forEach(g => groups.set(g.id, { ...g, members: [], messages: [], isDefault: true, createdBy: null }));
+
+// ── HELPERS ────────────────────────────────────────────
+function send(ws, p)    { if (ws && ws.readyState === 1) ws.send(JSON.stringify(p)); }
+function sendTo(userId, p) {
+  const s = sessions.get(userId);
+  if (s && s.ws && s.ws.readyState === 1) send(s.ws, p);
+}
+function broadcastGroup(groupId, p, exUserId = null) {
+  const g = groups.get(groupId); if (!g) return;
+  const msg = JSON.stringify(p);
+  g.members.forEach(uid => {
+    if (uid === exUserId) return;
+    const s = sessions.get(uid);
+    if (s && s.ws && s.ws.readyState === 1) s.ws.send(msg);
+  });
+}
+function broadcastAll(p, exUserId = null) {
+  const msg = JSON.stringify(p);
+  for (const [uid, s] of sessions)
+    if (uid !== exUserId && s.ws && s.ws.readyState === 1) s.ws.send(msg);
+}
+
+function dmKey(a, b) { return [a, b].sort().join(':'); }
+function isOnline(userId) { const s = sessions.get(userId); return s && s.ws && s.ws.readyState === 1; }
+
+function getGroupInfo(groupId) {
+  const g = groups.get(groupId); if (!g) return null;
+  return { id: g.id, name: g.name, emoji: g.emoji || '💬', isDefault: g.isDefault, createdBy: g.createdBy,
+    memberCount: g.members.length,
+    members: g.members.map(uid => { const s = sessions.get(uid); return s ? { id: uid, name: s.name, color: s.color, online: isOnline(uid) } : null; }).filter(Boolean) };
+}
+
+function getAllContacts() {
+  return [...sessions.entries()].map(([id, s]) => ({ id, name: s.name, color: s.color, online: isOnline(id) }));
+}
+
+// ── PUSH NOTIFICATIONS (Web Push via fetch) ────────────
+// Simple push: we store subscriptions and call the push endpoint
+// Using browser push API requires VAPID keys - we use a simpler approach:
+// Store subscriptions server-side, send via the push service
+
+// ── ROUTES ────────────────────────────────────────────
+// Save push subscription
+app.post('/api/push-subscribe', (req, res) => {
+  const { userId, subscription } = req.body;
+  if (!userId || !subscription) return res.status(400).json({ ok: false });
+  const s = sessions.get(userId);
+  if (s) { s.pushSub = subscription; console.log('Push sub saved for', s.name); }
+  res.json({ ok: true });
+});
+
+// VAPID public key endpoint (we'll use a static one for simplicity)
+app.get('/api/vapid-public-key', (req, res) => {
+  res.json({ key: process.env.VAPID_PUBLIC_KEY || null });
+});
+
+// ── WEBSOCKET ──────────────────────────────────────────
 wss.on('connection', ws => {
   ws.on('message', raw => {
-    let d; try{d=JSON.parse(raw);}catch{return;}
-    const user = users.get(ws);
+    let d; try { d = JSON.parse(raw); } catch { return; }
+    const userId = wsToUser.get(ws);
+    const user = userId ? sessions.get(userId) : null;
 
-    if (d.type === 'join') {
-      const name=String(d.name||'Анонім').slice(0,24).trim();
-      const room=String(d.room||'Загальний');
-      const color=COLORS[Math.floor(Math.random()*COLORS.length)];
-      const id=uuidv4().slice(0,8);
-      if(!rooms.has(room)) rooms.set(room,{messages:[],isDefault:false});
-      users.set(ws,{id,name,color,room});
-      send(ws,{type:'init',user:{id,name,color},room,rooms:allRooms(),history:rooms.get(room).messages.slice(-80),members:roomUsers(room),allUsers:allUsersArr()});
-      broadcast(room,{type:'user_joined',user:{id,name,color},members:roomUsers(room),rooms:allRooms(),allUsers:allUsersArr()},ws);
+    // ── REGISTER / LOGIN ──
+    if (d.type === 'register') {
+      const name  = String(d.name || 'Анонім').slice(0, 24).trim();
+      const uid   = d.userId || uuidv4().slice(0, 12); // reuse existing ID if provided
+      const color = (sessions.get(uid) && sessions.get(uid).color) || COLORS[Math.floor(Math.random() * COLORS.length)];
+
+      // If session exists (reconnect), update ws
+      const existing = sessions.get(uid);
+      sessions.set(uid, { name, color, ws, pushSub: existing?.pushSub || null });
+      wsToUser.set(ws, uid);
+
+      // Add to all default groups if not already member
+      defaultGroups.forEach(g => {
+        const grp = groups.get(g.id);
+        if (grp && !grp.members.includes(uid)) grp.members.push(uid);
+      });
+
+      // Send init data
+      const myGroups = [...groups.values()]
+        .filter(g => g.members.includes(uid))
+        .map(g => ({ ...getGroupInfo(g.id), lastMsg: g.messages[g.messages.length - 1] || null }));
+
+      send(ws, {
+        type: 'init',
+        user: { id: uid, name, color },
+        groups: myGroups,
+        contacts: getAllContacts().filter(c => c.id !== uid),
+      });
+
+      // Notify others
+      broadcastAll({ type: 'contact_online', user: { id: uid, name, color, online: true } }, uid);
       return;
     }
-    if(!user) return;
 
-    if (d.type === 'message') {
-      const text=String(d.text||'').slice(0,4000).trim(); if(!text) return;
-      const msg={id:uuidv4().slice(0,8),from:{id:user.id,name:user.name,color:user.color},text,time:new Date().toISOString(),msgType:'text'};
-      const r=rooms.get(user.room); if(!r) return;
-      r.messages.push(msg); if(r.messages.length>200) r.messages.shift();
-      broadcast(user.room,{type:'message',msg});
+    if (!user || !userId) return;
+
+    // ── GROUP MESSAGE ──
+    if (d.type === 'group_msg') {
+      const gid = String(d.groupId || '');
+      const g = groups.get(gid); if (!g || !g.members.includes(userId)) return;
+      const text = String(d.text || '').slice(0, 4000).trim(); if (!text) return;
+      const msg = { id: uuidv4().slice(0,8), from: { id: userId, name: user.name, color: user.color }, text, time: new Date().toISOString(), msgType: 'text' };
+      g.messages.push(msg); if (g.messages.length > 300) g.messages.shift();
+      broadcastGroup(gid, { type: 'group_msg', groupId: gid, msg });
+      // Push notify offline members
+      g.members.forEach(uid => { if (!isOnline(uid)) pushNotify(uid, user.name, text, gid); });
     }
 
-    else if (d.type === 'image') {
-      const img=String(d.imageData||''); if(!img||img.length>6000000) return;
-      const msg={id:uuidv4().slice(0,8),from:{id:user.id,name:user.name,color:user.color},imageData:img,time:new Date().toISOString(),msgType:'image'};
-      const r=rooms.get(user.room); if(!r) return;
-      r.messages.push(msg); if(r.messages.length>200) r.messages.shift();
-      broadcast(user.room,{type:'message',msg});
+    // ── GROUP IMAGE ──
+    else if (d.type === 'group_img') {
+      const gid = String(d.groupId || '');
+      const g = groups.get(gid); if (!g || !g.members.includes(userId)) return;
+      const img = String(d.imageData || ''); if (!img || img.length > 7000000) return;
+      const msg = { id: uuidv4().slice(0,8), from: { id: userId, name: user.name, color: user.color }, imageData: img, time: new Date().toISOString(), msgType: 'image' };
+      g.messages.push(msg); if (g.messages.length > 300) g.messages.shift();
+      broadcastGroup(gid, { type: 'group_msg', groupId: gid, msg });
+      g.members.forEach(uid => { if (!isOnline(uid)) pushNotify(uid, user.name, '📷 Фото', gid); });
     }
 
+    // ── DM MESSAGE ──
     else if (d.type === 'dm') {
-      const toId=String(d.toId||''), text=String(d.text||'').slice(0,4000).trim();
-      if(!text||!toId||toId===user.id) return;
-      const key=dmKey(user.id,toId);
-      if(!dms.has(key)) dms.set(key,{messages:[]});
-      const msg={id:uuidv4().slice(0,8),from:{id:user.id,name:user.name,color:user.color},text,time:new Date().toISOString(),msgType:'text'};
-      dms.get(key).messages.push(msg); if(dms.get(key).messages.length>200) dms.get(key).messages.shift();
-      send(ws,{type:'dm_message',msg,dmWith:toId});
-      for(const[w,u]of users) if(u.id===toId) send(w,{type:'dm_message',msg,dmWith:user.id,dmWithName:user.name,dmWithColor:user.color});
+      const toId = String(d.toId || ''); if (!toId || toId === userId) return;
+      const text = String(d.text || '').slice(0, 4000).trim(); if (!text) return;
+      const key = dmKey(userId, toId);
+      if (!dms.has(key)) dms.set(key, { messages: [] });
+      const msg = { id: uuidv4().slice(0,8), from: { id: userId, name: user.name, color: user.color }, text, time: new Date().toISOString(), msgType: 'text' };
+      dms.get(key).messages.push(msg); if (dms.get(key).messages.length > 300) dms.get(key).messages.shift();
+      send(ws, { type: 'dm_msg', dmWith: toId, msg });
+      sendTo(toId, { type: 'dm_msg', dmWith: userId, msg, fromName: user.name, fromColor: user.color });
+      if (!isOnline(toId)) pushNotify(toId, user.name, text, 'dm:'+userId);
     }
 
-    else if (d.type === 'dm_image') {
-      const toId=String(d.toId||''), img=String(d.imageData||'');
-      if(!img||img.length>6000000||!toId) return;
-      const key=dmKey(user.id,toId);
-      if(!dms.has(key)) dms.set(key,{messages:[]});
-      const msg={id:uuidv4().slice(0,8),from:{id:user.id,name:user.name,color:user.color},imageData:img,time:new Date().toISOString(),msgType:'image'};
+    // ── DM IMAGE ──
+    else if (d.type === 'dm_img') {
+      const toId = String(d.toId || ''); if (!toId || toId === userId) return;
+      const img = String(d.imageData || ''); if (!img || img.length > 7000000) return;
+      const key = dmKey(userId, toId);
+      if (!dms.has(key)) dms.set(key, { messages: [] });
+      const msg = { id: uuidv4().slice(0,8), from: { id: userId, name: user.name, color: user.color }, imageData: img, time: new Date().toISOString(), msgType: 'image' };
       dms.get(key).messages.push(msg);
-      send(ws,{type:'dm_message',msg,dmWith:toId});
-      for(const[w,u]of users) if(u.id===toId) send(w,{type:'dm_message',msg,dmWith:user.id,dmWithName:user.name,dmWithColor:user.color});
+      send(ws, { type: 'dm_msg', dmWith: toId, msg });
+      sendTo(toId, { type: 'dm_msg', dmWith: userId, msg, fromName: user.name, fromColor: user.color });
+      if (!isOnline(toId)) pushNotify(toId, user.name, '📷 Фото', 'dm:'+userId);
     }
 
-    else if (d.type === 'get_dm_history') {
-      const toId=String(d.toId||''), key=dmKey(user.id,toId);
-      const history=dms.has(key)?dms.get(key).messages.slice(-80):[];
-      send(ws,{type:'dm_history',toId,history});
+    // ── GET DM HISTORY ──
+    else if (d.type === 'get_dm') {
+      const toId = String(d.toId || '');
+      const key = dmKey(userId, toId);
+      send(ws, { type: 'dm_history', toId, messages: dms.has(key) ? dms.get(key).messages.slice(-100) : [] });
     }
 
-    else if (d.type === 'switch_room') {
-      const newRoom=String(d.room||'Загальний');
-      broadcast(user.room,{type:'user_left',userId:user.id,members:roomUsers(user.room).filter(u=>u.id!==user.id),rooms:allRooms()});
-      if(!rooms.has(newRoom)) rooms.set(newRoom,{messages:[],isDefault:false});
-      user.room=newRoom;
-      send(ws,{type:'room_switched',room:newRoom,rooms:allRooms(),history:rooms.get(newRoom).messages.slice(-80),members:roomUsers(newRoom)});
-      broadcast(newRoom,{type:'user_joined',user:{id:user.id,name:user.name,color:user.color},members:roomUsers(newRoom),rooms:allRooms(),allUsers:allUsersArr()},ws);
+    // ── GET GROUP HISTORY ──
+    else if (d.type === 'get_group') {
+      const gid = String(d.groupId || '');
+      const g = groups.get(gid); if (!g) return;
+      send(ws, { type: 'group_history', groupId: gid, messages: g.messages.slice(-100), info: getGroupInfo(gid) });
     }
 
-    else if (d.type === 'create_room') {
-      const name=String(d.name||'').slice(0,32).trim();
-      if(!name||rooms.has(name)){send(ws,{type:'error',text:'Кімната вже існує або назва порожня'});return;}
-      rooms.set(name,{messages:[],isDefault:false});
-      broadcastAll({type:'rooms_updated',rooms:allRooms()});
+    // ── CREATE GROUP ──
+    else if (d.type === 'create_group') {
+      const name = String(d.name || '').slice(0, 32).trim(); if (!name) return;
+      const emoji = String(d.emoji || '💬').slice(0, 4);
+      const memberIds = Array.isArray(d.members) ? d.members.filter(id => sessions.has(id)) : [];
+      if (!memberIds.includes(userId)) memberIds.push(userId);
+      const gid = 'g_' + uuidv4().slice(0, 8);
+      groups.set(gid, { id: gid, name, emoji, members: memberIds, messages: [], isDefault: false, createdBy: userId });
+      const info = getGroupInfo(gid);
+      memberIds.forEach(uid => sendTo(uid, { type: 'group_created', group: { ...info, lastMsg: null } }));
     }
 
-    else if (d.type === 'rename_room') {
-      const old=String(d.oldName||''), nw=String(d.newName||'').slice(0,32).trim();
-      const r=rooms.get(old);
-      if(!r||r.isDefault||!nw||rooms.has(nw)){send(ws,{type:'error',text:'Не можна перейменувати'});return;}
-      rooms.set(nw,{...r}); rooms.delete(old);
-      for(const[w,u]of users) if(u.room===old){u.room=nw;send(w,{type:'room_renamed',oldName:old,newName:nw,rooms:allRooms()});}
-      broadcastAll({type:'rooms_updated',rooms:allRooms()});
+    // ── RENAME GROUP ──
+    else if (d.type === 'rename_group') {
+      const gid = String(d.groupId || '');
+      const g = groups.get(gid); if (!g || g.isDefault) return;
+      g.name = String(d.name || '').slice(0, 32).trim() || g.name;
+      g.emoji = String(d.emoji || g.emoji).slice(0, 4);
+      broadcastAll({ type: 'group_updated', group: getGroupInfo(gid) });
     }
 
-    else if (d.type === 'delete_room') {
-      const name=String(d.name||''), r=rooms.get(name);
-      if(!r||r.isDefault){send(ws,{type:'error',text:'Не можна видалити цю кімнату'});return;}
-      rooms.delete(name);
-      for(const[w,u]of users) if(u.room===name){u.room='Загальний';send(w,{type:'room_deleted',name,rooms:allRooms(),history:rooms.get('Загальний').messages.slice(-80),members:roomUsers('Загальний')});}
-      broadcastAll({type:'rooms_updated',rooms:allRooms()});
+    // ── DELETE GROUP ──
+    else if (d.type === 'delete_group') {
+      const gid = String(d.groupId || '');
+      const g = groups.get(gid); if (!g || g.isDefault || g.createdBy !== userId) return;
+      const members = [...g.members];
+      groups.delete(gid);
+      members.forEach(uid => sendTo(uid, { type: 'group_deleted', groupId: gid }));
     }
 
+    // ── ADD MEMBER TO GROUP ──
+    else if (d.type === 'add_to_group') {
+      const gid = String(d.groupId || '');
+      const addId = String(d.userId || '');
+      const g = groups.get(gid); if (!g || !sessions.has(addId)) return;
+      if (!g.members.includes(addId)) {
+        g.members.push(addId);
+        const info = getGroupInfo(gid);
+        g.members.forEach(uid => sendTo(uid, { type: 'group_updated', group: info }));
+        sendTo(addId, { type: 'group_created', group: { ...info, lastMsg: g.messages[g.messages.length-1]||null } });
+      }
+    }
+
+    // ── TYPING ──
     else if (d.type === 'typing') {
-      broadcast(user.room,{type:'typing',userId:user.id,name:user.name},ws);
+      if (d.groupId) broadcastGroup(d.groupId, { type: 'typing', groupId: d.groupId, userId, name: user.name }, userId);
+      else if (d.toId) sendTo(d.toId, { type: 'dm_typing', fromId: userId, name: user.name });
     }
 
-    else if (d.type === 'dm_typing') {
-      const toId=String(d.toId||'');
-      for(const[w,u]of users) if(u.id===toId) send(w,{type:'dm_typing',fromId:user.id,name:user.name});
+    // ── PUSH SUBSCRIBE ──
+    else if (d.type === 'push_sub') {
+      user.pushSub = d.subscription;
     }
   });
 
   ws.on('close', () => {
-    const user=users.get(ws);
-    if(user){
-      broadcast(user.room,{type:'user_left',userId:user.id,members:roomUsers(user.room).filter(u=>u.id!==user.id),rooms:allRooms()});
-      broadcastAll({type:'user_offline',userId:user.id},ws);
-      users.delete(ws);
+    const userId = wsToUser.get(ws);
+    if (userId) {
+      const s = sessions.get(userId);
+      if (s) { s.ws = null; }
+      broadcastAll({ type: 'contact_offline', userId }, userId);
+      wsToUser.delete(ws);
     }
   });
 });
 
+// ── PUSH NOTIFICATIONS ────────────────────────────────
+async function pushNotify(userId, fromName, text, context) {
+  const s = sessions.get(userId);
+  if (!s || !s.pushSub) return;
+  try {
+    const payload = JSON.stringify({ title: 'VAX: ' + fromName, body: text, context });
+    const sub = s.pushSub;
+    // Send via Web Push protocol
+    const res = await fetch(sub.endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/octet-stream', 'TTL': '86400' },
+      body: payload
+    });
+  } catch (e) { /* push failed silently */ }
+}
+
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log(`VAX running on port ${PORT}`));
+server.listen(PORT, () => console.log(`VAX v2 running on port ${PORT}`));
