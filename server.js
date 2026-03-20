@@ -172,7 +172,7 @@ wss.on('connection', ws => {
       run(`INSERT INTO dm_messages (id,from_id,to_id,from_name,from_color,text,msg_type,time) VALUES (?,?,?,?,?,?,?,?)`,
         [id,userId,toId,user.name,user.color,text,'text',time]);
       const msg = { id, from:{id:userId,name:user.name,color:user.color}, text, msgType:'text', time };
-      send(ws, { type:'dm_msg', dmWith:toId, msg });
+      // Send only to recipient, NOT back to sender (client shows locally)
       sendTo(toId, { type:'dm_msg', dmWith:userId, msg, fromName:user.name, fromColor:user.color });
     }
 
@@ -183,7 +183,7 @@ wss.on('connection', ws => {
       run(`INSERT INTO dm_messages (id,from_id,to_id,from_name,from_color,image_data,msg_type,time) VALUES (?,?,?,?,?,?,?,?)`,
         [id,userId,toId,user.name,user.color,img,'image',time]);
       const msg = { id, from:{id:userId,name:user.name,color:user.color}, imageData:img, msgType:'image', time };
-      send(ws, { type:'dm_msg', dmWith:toId, msg });
+      // Send only to recipient, NOT back to sender (client shows locally)
       sendTo(toId, { type:'dm_msg', dmWith:userId, msg, fromName:user.name, fromColor:user.color });
     }
 
