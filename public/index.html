@@ -459,6 +459,7 @@ const EMOJIS  = ['💬','🎮','🎵','🏀','🎨','🔥','⚡','🌙','🎯','
 
 // ── STATE ─────────────────────────────────────────────
 let ws=null, me=null;
+let hasLoggedIn=false;
 let groups={}, contacts={};          // id → data
 let dmHistories={};                  // contactId → messages[]
 let groupHistories={};               // groupId → messages[]
@@ -567,6 +568,11 @@ function connectWs(authType, username, password, name=''){
     } else {
       ws.send(JSON.stringify({type:'register', username, password, name}));
     }
+    // Keepalive ping every 25 seconds to prevent Railway timeout
+    if(window._pingInterval) clearInterval(window._pingInterval);
+    window._pingInterval = setInterval(()=>{
+      if(ws && ws.readyState===1) ws.send(JSON.stringify({type:'ping'}));
+    }, 25000);
   };
   newWs.onmessage=({data})=>{ try{ handle(JSON.parse(data)); }catch(e){} };
   newWs.onclose=()=>{
@@ -594,14 +600,15 @@ function handle(msg){
       break;
 
     case 'init':
-      const isFirstLogin = !me;
+      const isFirstLogin = !hasLoggedIn;
+      hasLoggedIn = true;
       me=msg.user;
       setBadge('●','var(--green)');
       const av=document.getElementById('myAv');
       av.style.background=me.color; av.textContent=ini(me.name);
       msg.groups.forEach(g=>{ groups[g.id]=g; });
       msg.contacts.forEach(c=>{ contacts[c.id]=c; });
-      showScreen('homeScreen');
+      if(isFirstLogin) showScreen('homeScreen');
       renderHome();
       requestPush();
       if(!me.username && !lsGet('vax_pass_skipped',false) && isFirstLogin){
@@ -1294,7 +1301,8 @@ function logout(){
   if(!confirm('Вийти з акаунту?')) return;
   lsSet('vax_auth', null);
   if(ws) ws.close();
-  ws=null; me=null; groups={}; contacts={}; dmHistories={}; groupHistories={};
+  ws=null; me=null; hasLoggedIn=false;
+  groups={}; contacts={}; dmHistories={}; groupHistories={};
   closeSheet('settings');
   showScreen('loginScreen');
   document.getElementById('loginUsername').value='';
