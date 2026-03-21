@@ -5,7 +5,7 @@ const { v4: uuidv4 } = require('uuid');
 const path = require('path');
 const { Pool } = require('pg');
 const crypto = require('crypto');
-const { S3Client, PutObjectCommand, GetObjectCommand, HeadObjectCommand } = require('@aws-sdk/client-s3');
+const { S3Client, PutObjectCommand, GetObjectCommand } = require('@aws-sdk/client-s3');
 
 function hashPassword(pass) {
   return crypto.createHash('sha256').update(pass + 'vax_salt_2024').digest('hex');
@@ -360,7 +360,8 @@ wss.on('connection', ws => {
       const img = String(d.imageData||''); if (!img||img.length>50000000) return;
       const fileType = String(d.fileType||'image/jpeg');
       const fileName = String(d.fileName||'file');
-      const msgType = fileType.startsWith('image/')?'image':fileType.startsWith('video/')?'video':fileType.startsWith('audio/')?'audio':'file';
+      const isVoice = fileType.startsWith('audio/') && (fileName.includes('voice_') || fileType.includes('webm') || fileType.includes('ogg'));
+      const msgType = fileType.startsWith('image/')?'image':fileType.startsWith('video/')?'video':isVoice?'voice':fileType.startsWith('audio/')?'audio':'file';
       const id = uuidv4().slice(0,8), time = new Date().toISOString();
       // Try upload to S3, fallback to base64
       const s3url = await uploadToS3(img, fileName, fileType);
@@ -474,7 +475,8 @@ wss.on('connection', ws => {
       const img = String(d.imageData||''); if (!img||img.length>50000000) return;
       const fileType = String(d.fileType||'image/jpeg');
       const fileName = String(d.fileName||'file');
-      const msgType = fileType.startsWith('image/')?'image':fileType.startsWith('video/')?'video':fileType.startsWith('audio/')?'audio':'file';
+      const isVoiceDm = fileType.startsWith('audio/') && (fileName.includes('voice_') || fileType.includes('webm') || fileType.includes('ogg'));
+      const msgType = fileType.startsWith('image/')?'image':fileType.startsWith('video/')?'video':isVoiceDm?'voice':fileType.startsWith('audio/')?'audio':'file';
       const id = uuidv4().slice(0,8), time = new Date().toISOString();
       const s3url = await uploadToS3(img, fileName, fileType);
       const storedData = s3url || img;
@@ -639,55 +641,14 @@ app.get('/api/file/:bucket/*', async (req, res) => {
   try {
     const key = req.params[0];
     const bucket = req.params.bucket;
-
+    const cmd = new GetObjectCommand({ Bucket: bucket, Key: key });
+    const data = await s3.send(cmd);
+    // Set content type
     const ext = key.split('.').pop().toLowerCase();
-    const types = {
-      webm: 'audio/webm', mp4: 'video/mp4', m4a: 'audio/mp4',
-      ogg: 'audio/ogg', mp3: 'audio/mpeg', jpg: 'image/jpeg',
-      jpeg: 'image/jpeg', png: 'image/png', gif: 'image/gif',
-      pdf: 'application/pdf'
-    };
-
-    // Get file metadata (size + content-type)
-    const head = await s3.send(new HeadObjectCommand({ Bucket: bucket, Key: key }));
-    const contentType = head.ContentType || types[ext] || 'application/octet-stream';
-    const totalSize = head.ContentLength;
-
-    // Parse Range header (required for Android media players)
-    const rangeHeader = req.headers['range'];
-    if (rangeHeader && totalSize) {
-      const parts = rangeHeader.replace(/bytes=/, '').split('-');
-      const start = parseInt(parts[0], 10);
-      const end = parts[1] ? parseInt(parts[1], 10) : totalSize - 1;
-      const chunkSize = end - start + 1;
-
-      const data = await s3.send(new GetObjectCommand({
-        Bucket: bucket, Key: key,
-        Range: `bytes=${start}-${end}`,
-      }));
-
-      res.writeHead(206, {
-        'Content-Range': `bytes ${start}-${end}/${totalSize}`,
-        'Accept-Ranges': 'bytes',
-        'Content-Length': chunkSize,
-        'Content-Type': contentType,
-        'Cache-Control': 'public, max-age=31536000',
-      });
-      data.Body.pipe(res);
-    } else {
-      // Full file request
-      const data = await s3.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
-
-      const headers = {
-        'Content-Type': contentType,
-        'Accept-Ranges': 'bytes',
-        'Cache-Control': 'public, max-age=31536000',
-      };
-      if (totalSize) headers['Content-Length'] = totalSize;
-
-      res.writeHead(200, headers);
-      data.Body.pipe(res);
-    }
+    const types = {webm:'audio/webm', mp4:'video/mp4', m4a:'audio/mp4', ogg:'audio/ogg', mp3:'audio/mpeg', jpg:'image/jpeg', jpeg:'image/jpeg', png:'image/png', gif:'image/gif', pdf:'application/pdf'};
+    res.setHeader('Content-Type', data.ContentType || types[ext] || 'application/octet-stream');
+    res.setHeader('Cache-Control', 'public, max-age=31536000');
+    data.Body.pipe(res);
   } catch(e) {
     console.error('File proxy error:', e.message);
     res.status(404).send('Not found');
