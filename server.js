@@ -127,6 +127,9 @@ async function initDb() {
     PRIMARY KEY (poll_id, user_id)
   )`);
 
+  await pool.query(`ALTER TABLE dm_messages ADD COLUMN IF NOT EXISTS delivered BOOLEAN DEFAULT FALSE`);
+  await pool.query(`ALTER TABLE dm_messages ADD COLUMN IF NOT EXISTS read_at TIMESTAMPTZ`);
+
   console.log('DB ready');
 }
 
@@ -172,6 +175,8 @@ function rowToMsg(r) {
     deleted: r.deleted||false,
     replyTo: r.reply_to||undefined,
     replyPreview: r.reply_preview||undefined,
+    delivered: r.delivered||false,
+    read: !!r.read_at,
   };
 }
 
@@ -328,10 +333,24 @@ wss.on('connection', ws => {
       const replyTo = d.replyTo||null;
       const replyPreview = d.replyPreview ? String(d.replyPreview).slice(0,100) : null;
       const id = uuidv4().slice(0,8), time = new Date().toISOString();
-      await pool.query(`INSERT INTO dm_messages (id,from_id,to_id,from_name,from_color,text,msg_type,reply_to,reply_preview,time) VALUES ($1,$2,$3,$4,$5,$6,'text',$7,$8,$9)`,
-        [id,userId,toId,user.name,user.color,text,replyTo,replyPreview,time]);
-      const msg = { id, from:{id:userId,name:user.name,color:user.color}, text, msgType:'text', time, replyTo, replyPreview };
+      const isDelivered = isOnline(toId);
+      await pool.query(`INSERT INTO dm_messages (id,from_id,to_id,from_name,from_color,text,msg_type,reply_to,reply_preview,delivered,time) VALUES ($1,$2,$3,$4,$5,$6,'text',$7,$8,$9,$10)`,
+        [id,userId,toId,user.name,user.color,text,replyTo,replyPreview,isDelivered,time]);
+      const msg = { id, from:{id:userId,name:user.name,color:user.color}, text, msgType:'text', time, replyTo, replyPreview, delivered:isDelivered };
       sendTo(toId, { type:'dm_msg', dmWith:userId, msg, fromName:user.name, fromColor:user.color });
+      // Notify sender of delivery status
+      send(ws, { type:'msg_status', msgId:id, delivered:isDelivered, read:false });
+    }
+
+    // ── MARK AS READ ──
+    else if (d.type === 'mark_read') {
+      const toId = String(d.toId||'');
+      // Mark all messages from toId to userId as read
+      await pool.query(`UPDATE dm_messages SET read_at=NOW(), delivered=TRUE WHERE from_id=$1 AND to_id=$2 AND read_at IS NULL`,[toId,userId]);
+      // Get ids of updated messages
+      const updated = await q(`SELECT id FROM dm_messages WHERE from_id=$1 AND to_id=$2 AND read_at IS NOT NULL`,[toId,userId]);
+      // Notify sender that messages were read
+      updated.forEach(r=>sendTo(toId, { type:'msg_status', msgId:r.id, delivered:true, read:true }));
     }
 
     // ── EDIT MESSAGE ──
