@@ -561,28 +561,31 @@ function connectWs(authType, username, password, name=''){
   const proto=location.protocol==='https:'?'wss':'ws';
   const newWs=new WebSocket(`${proto}://${location.host}`);
 
+  newWs.onclose=()=>{
+    if(window._pingInterval){ clearInterval(window._pingInterval); window._pingInterval=null; }
+    if(!me) return; // Not logged in yet — don't reconnect
+    const saved=lsGet('vax_auth',null);
+    if(!saved) return;
+    // Show offline only after 4 seconds (reconnect takes ~1-2s)
+    const offlineTimer=setTimeout(()=>setBadge('ОФЛАЙН','var(--accent3)'),4000);
+    window._offlineTimer=offlineTimer;
+    setTimeout(()=>connectWs('login',saved.username,saved.password), 500);
+  };
   newWs.onopen=()=>{
+    // Cancel offline badge if reconnected quickly
+    if(window._offlineTimer){ clearTimeout(window._offlineTimer); window._offlineTimer=null; }
     ws=newWs;
     if(authType==='login'){
       ws.send(JSON.stringify({type:'login', username, password}));
     } else {
       ws.send(JSON.stringify({type:'register', username, password, name}));
     }
-    // Keepalive ping every 25 seconds to prevent Railway timeout
+    // Keepalive ping every 25 seconds
     if(window._pingInterval) clearInterval(window._pingInterval);
-    window._pingInterval = setInterval(()=>{
-      if(ws && ws.readyState===1) ws.send(JSON.stringify({type:'ping'}));
+    window._pingInterval=setInterval(()=>{
+      if(ws?.readyState===1) ws.send(JSON.stringify({type:'ping'}));
     }, 25000);
   };
-  newWs.onmessage=({data})=>{ try{ handle(JSON.parse(data)); }catch(e){} };
-  newWs.onclose=()=>{
-    setBadge('ОФЛАЙН','var(--accent3)');
-    if(me){
-      const saved=lsGet('vax_auth',null);
-      if(saved) setTimeout(()=>connectWs('login',saved.username,saved.password),3000);
-    }
-  };
-  newWs.onerror=(e)=>{ console.error('WS error',e); };
 }
 
 function handle(msg){
