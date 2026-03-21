@@ -555,38 +555,38 @@ function setAuthErr2(msg){
 
 // ── WEBSOCKET ─────────────────────────────────────────
 function connectWs(authType, username, password, name=''){
-  // Close existing connection if any
   if(ws){ try{ ws.close(); }catch(e){} ws=null; }
+  if(window._pingInterval){ clearInterval(window._pingInterval); window._pingInterval=null; }
 
   const proto=location.protocol==='https:'?'wss':'ws';
   const newWs=new WebSocket(`${proto}://${location.host}`);
 
-  newWs.onclose=()=>{
-    if(window._pingInterval){ clearInterval(window._pingInterval); window._pingInterval=null; }
-    if(!me) return; // Not logged in yet — don't reconnect
-    const saved=lsGet('vax_auth',null);
-    if(!saved) return;
-    // Show offline only after 4 seconds (reconnect takes ~1-2s)
-    const offlineTimer=setTimeout(()=>setBadge('ОФЛАЙН','var(--accent3)'),4000);
-    window._offlineTimer=offlineTimer;
-    setTimeout(()=>connectWs('login',saved.username,saved.password), 500);
-  };
   newWs.onopen=()=>{
-    // Cancel offline badge if reconnected quickly
     if(window._offlineTimer){ clearTimeout(window._offlineTimer); window._offlineTimer=null; }
     ws=newWs;
-    if(authType==='login'){
-      ws.send(JSON.stringify({type:'login', username, password}));
-    } else {
-      ws.send(JSON.stringify({type:'register', username, password, name}));
-    }
-    // Keepalive ping every 25 seconds
-    if(window._pingInterval) clearInterval(window._pingInterval);
+    const payload = authType==='login'
+      ? {type:'login', username, password}
+      : {type:'register', username, password, name};
+    ws.send(JSON.stringify(payload));
     window._pingInterval=setInterval(()=>{
       if(ws?.readyState===1) ws.send(JSON.stringify({type:'ping'}));
     }, 25000);
   };
+
+  newWs.onmessage=({data})=>{ try{ handle(JSON.parse(data)); }catch(e){} };
+
+  newWs.onclose=()=>{
+    if(window._pingInterval){ clearInterval(window._pingInterval); window._pingInterval=null; }
+    if(!me) return;
+    const saved=lsGet('vax_auth',null);
+    if(!saved) return;
+    window._offlineTimer=setTimeout(()=>setBadge('ОФЛАЙН','var(--accent3)'), 4000);
+    setTimeout(()=>connectWs('login',saved.username,saved.password), 500);
+  };
+
+  newWs.onerror=()=>{};
 }
+
 
 function handle(msg){
   switch(msg.type){
