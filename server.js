@@ -4,6 +4,11 @@ const { createServer } = require('http');
 const { v4: uuidv4 } = require('uuid');
 const path = require('path');
 const { Pool } = require('pg');
+const crypto = require('crypto');
+
+function hashPassword(pass) {
+  return crypto.createHash('sha256').update(pass + 'vax_salt_2024').digest('hex');
+}
 
 const app = express();
 const server = createServer(app);
@@ -67,6 +72,10 @@ async function initDb() {
   await pool.query(`ALTER TABLE dm_messages ADD COLUMN IF NOT EXISTS file_name TEXT`);
   await pool.query(`ALTER TABLE group_messages ADD COLUMN IF NOT EXISTS file_type TEXT`);
   await pool.query(`ALTER TABLE dm_messages ADD COLUMN IF NOT EXISTS file_type TEXT`);
+  // Add auth columns
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS username TEXT`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash TEXT`);
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS users_username_idx ON users(username)`);
 
   console.log('DB ready');
 }
@@ -134,13 +143,55 @@ wss.on('connection', ws => {
     const userId = wsToUser.get(ws);
     const sesUser = userId ? sessions.get(userId) : null;
 
+    // ── LOGIN ──
+    if (d.type === 'login') {
+      const username = String(d.username||'').slice(0,24).trim().toLowerCase();
+      const password = String(d.password||'');
+      if (!username || !password) { send(ws, { type:'auth_error', msg:'Введіть логін і пароль' }); return; }
+      const user = await q1(`SELECT * FROM users WHERE username=$1`, [username]);
+      if (!user) { send(ws, { type:'auth_error', msg:'Користувача не знайдено' }); return; }
+      if (await q1(`SELECT 1 FROM banned_users WHERE id=$1`, [user.id])) { send(ws, { type:'banned' }); ws.close(); return; }
+      if (user.password_hash !== hashPassword(password)) { send(ws, { type:'auth_error', msg:'Невірний пароль' }); return; }
+      // Login success
+      sessions.set(user.id, { name: user.name, color: user.color, ws });
+      wsToUser.set(ws, user.id);
+      send(ws, { type:'init', user:{id:user.id,name:user.name,color:user.color,username:user.username}, groups: await getUserGroups(user.id), contacts: await allContacts(user.id) });
+      broadcastAll({ type:'contact_online', user:{id:user.id,name:user.name,color:user.color,online:true} }, user.id);
+      return;
+    }
+
     // ── REGISTER ──
     if (d.type === 'register') {
+      const username = String(d.username||'').slice(0,24).trim().toLowerCase();
+      const name     = String(d.name||d.username||'').slice(0,24).trim();
+      const password = String(d.password||'');
+      if (!username||!password||!name) { send(ws, { type:'auth_error', msg:'Заповніть всі поля' }); return; }
+      if (username.length < 3) { send(ws, { type:'auth_error', msg:'Логін мінімум 3 символи' }); return; }
+      if (password.length < 4) { send(ws, { type:'auth_error', msg:'Пароль мінімум 4 символи' }); return; }
+      // Check username taken
+      const existing = await q1(`SELECT 1 FROM users WHERE username=$1`, [username]);
+      if (existing) { send(ws, { type:'auth_error', msg:'Цей логін вже зайнятий' }); return; }
+      const uid = uuidv4().slice(0,12);
+      const color = COLORS[Math.floor(Math.random()*COLORS.length)];
+      const passHash = hashPassword(password);
+      await pool.query(`INSERT INTO users (id,name,color,username,password_hash) VALUES ($1,$2,$3,$4,$5)`, [uid,name,color,username,passHash]);
+      for (const gid of DEFAULT_GROUP_IDS) {
+        await pool.query(`INSERT INTO group_members (group_id,user_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`, [gid,uid]);
+      }
+      sessions.set(uid, { name, color, ws });
+      wsToUser.set(ws, uid);
+      send(ws, { type:'init', user:{id:uid,name,color,username}, groups: await getUserGroups(uid), contacts: await allContacts(uid) });
+      broadcastAll({ type:'contact_online', user:{id:uid,name,color,online:true} }, uid);
+      return;
+    }
+
+    // ── LEGACY REGISTER (old devices without password) ──
+    if (d.type === 'register_legacy') {
       const name = String(d.name||'Анонім').slice(0,24).trim();
       const uid  = d.userId || uuidv4().slice(0,12);
       if (await q1(`SELECT 1 FROM banned_users WHERE id=$1`, [uid])) { send(ws, { type:'banned' }); ws.close(); return; }
-      const existing = await q1(`SELECT * FROM users WHERE id=$1`, [uid]);
-      const color = existing?.color || COLORS[Math.floor(Math.random()*COLORS.length)];
+      const existingUser = await q1(`SELECT * FROM users WHERE id=$1`, [uid]);
+      const color = existingUser?.color || COLORS[Math.floor(Math.random()*COLORS.length)];
       await pool.query(`INSERT INTO users (id,name,color) VALUES ($1,$2,$3) ON CONFLICT (id) DO UPDATE SET name=$2`, [uid,name,color]);
       for (const gid of DEFAULT_GROUP_IDS) {
         await pool.query(`INSERT INTO group_members (group_id,user_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`, [gid,uid]);
@@ -251,7 +302,24 @@ wss.on('connection', ws => {
       members.forEach(uid => sendTo(uid, { type:'group_deleted', groupId:gid }));
     }
 
-    else if (d.type === 'typing') {
+    else if (d.type === 'change_profile') {
+      const newName = String(d.name||'').slice(0,24).trim();
+      const newPass = String(d.password||'');
+      const newUsername = String(d.username||'').slice(0,24).trim().toLowerCase();
+      if (newName) await pool.query(`UPDATE users SET name=$1 WHERE id=$2`, [newName, userId]);
+      if (newPass && newPass.length >= 4) await pool.query(`UPDATE users SET password_hash=$1 WHERE id=$2`, [hashPassword(newPass), userId]);
+      if (newUsername && newUsername.length >= 3) {
+        const taken = await q1(`SELECT 1 FROM users WHERE username=$1 AND id!=$2`, [newUsername, userId]);
+        if (taken) { send(ws, { type:'error', text:'Цей логін вже зайнятий' }); }
+        else await pool.query(`UPDATE users SET username=$1 WHERE id=$2`, [newUsername, userId]);
+      }
+      const updated = await q1(`SELECT * FROM users WHERE id=$1`, [userId]);
+      if (updated) {
+        const s = sessions.get(userId);
+        if (s) { s.name = updated.name; s.color = updated.color; }
+        send(ws, { type:'profile_updated', user:{id:userId, name:updated.name, color:updated.color, username:updated.username} });
+      }
+    }
       if (d.groupId) broadcastGroup(d.groupId, { type:'typing', groupId:d.groupId, userId, name:user.name }, userId);
       else if (d.toId) sendTo(d.toId, { type:'dm_typing', fromId:userId, name:user.name });
     }
