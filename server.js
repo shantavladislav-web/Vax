@@ -406,7 +406,19 @@ app.post('/api/admin/unban', async (req,res) => {
   res.json({ok:true});
 });
 
-app.post('/api/admin/delete-group', async (req,res) => {
+app.post('/api/admin/delete-user', async (req,res) => {
+  if (req.body.password!==ADMIN_PASS) return res.status(403).json({ok:false});
+  const uid = req.body.userId;
+  const s = sessions.get(uid);
+  if(s?.ws){ send(s.ws,{type:'banned',reason:'Ваш акаунт було видалено адміністратором'}); s.ws.close(); }
+  await pool.query(`DELETE FROM group_members WHERE user_id=$1`,[uid]);
+  await pool.query(`DELETE FROM dm_messages WHERE from_id=$1 OR to_id=$1`,[uid]);
+  await pool.query(`DELETE FROM group_messages WHERE from_id=$1`,[uid]);
+  await pool.query(`DELETE FROM banned_users WHERE id=$1`,[uid]);
+  await pool.query(`DELETE FROM users WHERE id=$1`,[uid]);
+  broadcastAll({type:'contact_offline',userId:uid});
+  res.json({ok:true});
+});
   if (req.body.password!==ADMIN_PASS) return res.status(403).json({ok:false});
   const gid=req.body.groupId;
   const members=(await q(`SELECT user_id FROM group_members WHERE group_id=$1`,[gid])).map(r=>r.user_id);
