@@ -634,8 +634,10 @@ function handle(msg){
       break;
 
     case 'banned':
-      alert('❌ Тебе заблокував адміністратор VAX');
+      alert('❌ ' + (msg.reason || 'Ваш акаунт заблоковано адміністратором VAX'));
+      lsSet('vax_auth', null);
       if(ws) ws.close();
+      me=null;
       showScreen('loginScreen');
       break;
 
