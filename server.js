@@ -5,7 +5,7 @@ const { v4: uuidv4 } = require('uuid');
 const path = require('path');
 const { Pool } = require('pg');
 const crypto = require('crypto');
-const { S3Client, PutObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
+const { S3Client, PutObjectCommand, GetObjectCommand } = require('@aws-sdk/client-s3');
 
 function hashPassword(pass) {
   return crypto.createHash('sha256').update(pass + 'vax_salt_2024').digest('hex');
@@ -35,10 +35,9 @@ async function uploadToS3(base64data, fileName, mimeType) {
       Body: buffer,
       ContentType: mimeType || 'application/octet-stream',
     }));
-    // Railway t3.storageapi.dev public URL format
     const endpoint = process.env.AWS_ENDPOINT_URL.replace(/\/$/, '');
-    const url = `${endpoint}/${S3_BUCKET}/${key}`;
-    console.log('S3 uploaded:', url);
+    const url = `/api/file/${S3_BUCKET}/${key}`;
+    console.log('S3 uploaded:', endpoint + '/' + S3_BUCKET + '/' + key);
     return url;
   } catch(e) {
     console.error('S3 upload error:', e.message);
@@ -632,6 +631,26 @@ wss.on('connection', ws => {
       wsToUser.delete(ws);
     }
   });
+});
+
+// ── FILE PROXY (S3 files served through server) ────────
+app.get('/api/file/:bucket/*', async (req, res) => {
+  if (!s3) return res.status(404).send('No S3');
+  try {
+    const key = req.params[0];
+    const bucket = req.params.bucket;
+    const cmd = new GetObjectCommand({ Bucket: bucket, Key: key });
+    const data = await s3.send(cmd);
+    // Set content type
+    const ext = key.split('.').pop().toLowerCase();
+    const types = {webm:'audio/webm', mp4:'video/mp4', m4a:'audio/mp4', ogg:'audio/ogg', mp3:'audio/mpeg', jpg:'image/jpeg', jpeg:'image/jpeg', png:'image/png', gif:'image/gif', pdf:'application/pdf'};
+    res.setHeader('Content-Type', data.ContentType || types[ext] || 'application/octet-stream');
+    res.setHeader('Cache-Control', 'public, max-age=31536000');
+    data.Body.pipe(res);
+  } catch(e) {
+    console.error('File proxy error:', e.message);
+    res.status(404).send('Not found');
+  }
 });
 
 // ── ADMIN ──────────────────────────────────────────────
