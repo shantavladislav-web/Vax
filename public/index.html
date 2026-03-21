@@ -410,12 +410,17 @@ body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradie
 <!-- Profile -->
 <div class="overlay" id="profileSheet" onclick="if(event.target===this)closeSheet('profile')">
   <div class="sheet">
-    <div class="sheet-title">МІЙ ПРОФІЛЬ</div>
+    <div class="sheet-title" id="s_my_profile">МІЙ ПРОФІЛЬ</div>
     <div style="display:flex;align-items:center;gap:16px;padding:8px 0">
-      <div id="profileAv" style="width:64px;height:64px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:'Rajdhani',sans-serif;font-weight:700;font-size:26px;color:#fff;flex-shrink:0"></div>
+      <div style="position:relative;flex-shrink:0" onclick="document.getElementById('avatarInp').click()" title="Змінити фото">
+        <div id="profileAv" style="width:72px;height:72px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:'Rajdhani',sans-serif;font-weight:700;font-size:28px;color:#fff;overflow:hidden;cursor:pointer"></div>
+        <div style="position:absolute;bottom:0;right:0;width:22px;height:22px;border-radius:50%;background:var(--accent2);display:flex;align-items:center;justify-content:center;font-size:12px;cursor:pointer">📷</div>
+        <input type="file" id="avatarInp" accept="image/*" onchange="uploadAvatar(this)" style="display:none">
+      </div>
       <div>
         <div id="profileName" style="font-size:20px;font-weight:700;letter-spacing:.5px"></div>
-        <div style="font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--muted);margin-top:4px">ID: <span id="profileId"></span></div>
+        <div style="font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--muted);margin-top:4px">@<span id="profileUsername"></span></div>
+        <div style="font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--dim);margin-top:2px">ID: <span id="profileId"></span></div>
         <div id="profilePassStatus" style="font-family:'Share Tech Mono',monospace;font-size:10px;margin-top:4px"></div>
       </div>
     </div>
@@ -426,20 +431,27 @@ body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradie
 <!-- Settings -->
 <div class="overlay" id="settingsSheet" onclick="if(event.target===this)closeSheet('settings')">
   <div class="sheet">
-    <div class="sheet-title">⚙️ НАЛАШТУВАННЯ</div>
-    <div><div class="lbl" style="margin-bottom:6px">Новий логін</div>
+    <div class="sheet-title">⚙️ <span id="s_settings">НАЛАШТУВАННЯ</span></div>
+    <div><div class="lbl" style="margin-bottom:6px" id="s_new_login">Новий логін</div>
     <input class="sheet-inp" id="settingsUsername" placeholder="Новий логін..." maxlength="24"></div>
-    <div><div class="lbl" style="margin-bottom:6px">Нове ім'я</div>
+    <div><div class="lbl" style="margin-bottom:6px" id="s_new_name">Нове ім'я</div>
     <input class="sheet-inp" id="newNameInp" placeholder="Нове ім'я..." maxlength="24"></div>
-    <div><div class="lbl" style="margin-bottom:6px">Новий пароль</div>
+    <div><div class="lbl" style="margin-bottom:6px" id="s_new_pass">Новий пароль</div>
     <input class="sheet-inp" id="changePassInp" type="password" placeholder="Мін. 4 символи..." maxlength="64"></div>
-    <div><div class="lbl" style="margin-bottom:6px">Підтвердити пароль</div>
+    <div><div class="lbl" style="margin-bottom:6px" id="s_confirm_pass">Підтвердити пароль</div>
     <input class="sheet-inp" id="changePassInp2" type="password" placeholder="Повторіть пароль..." maxlength="64"></div>
-    <div class="sheet-btns">
-      <button class="sheet-btn cancel" onclick="closeSheet('settings')">Скасувати</button>
-      <button class="sheet-btn ok" onclick="saveSettings()">Зберегти</button>
+    <div>
+      <div class="lbl" style="margin-bottom:6px" id="s_language">Мова інтерфейсу</div>
+      <div style="display:flex;gap:8px">
+        <button id="langUk" class="sheet-btn ok" style="flex:1" onclick="setLang('uk')">🇺🇦 Українська</button>
+        <button id="langEn" class="sheet-btn cancel" style="flex:1" onclick="setLang('en')">🇬🇧 English</button>
+      </div>
     </div>
-    <button class="sheet-btn danger" style="margin-top:4px" onclick="logout()">🚪 Вийти з акаунту</button>
+    <div class="sheet-btns">
+      <button class="sheet-btn cancel" onclick="closeSheet('settings')" id="s_cancel_btn">Скасувати</button>
+      <button class="sheet-btn ok" onclick="saveSettings()" id="s_save_btn">Зберегти</button>
+    </div>
+    <button class="sheet-btn danger" style="margin-top:4px" onclick="logout()" id="s_logout_btn">🚪 Вийти з акаунту</button>
   </div>
 </div>
 
@@ -484,6 +496,9 @@ async function hashPass(pass){
 
 // ── BOOT ──────────────────────────────────────────────
 window.addEventListener('DOMContentLoaded',()=>{
+  // Apply saved language
+  const savedLang=lsGet('vax_lang','uk');
+  applyLang(savedLang);
   // Auto-login if saved credentials
   const savedUser = lsGet('vax_auth', null);
   if(savedUser?.username && savedUser?.password){
@@ -616,10 +631,12 @@ function handle(msg){
       me=msg.user;
       setBadge('●','var(--green)');
       const av=document.getElementById('myAv');
-      av.style.background=me.color; av.textContent=ini(me.name);
+      const savedAv=lsGet('vax_avatar_'+me.id, null);
+      if(savedAv){ av.innerHTML=`<img src="${savedAv}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`; }
+      else { av.style.background=me.color; av.textContent=ini(me.name); }
       msg.groups.forEach(g=>{ groups[g.id]=g; });
       msg.contacts.forEach(c=>{ contacts[c.id]=c; });
-      if(isFirstLogin) showScreen('homeScreen');
+      if(isFirstLogin){ showScreen('homeScreen'); applyLang(lsGet('vax_lang','uk')); }
       renderHome();
       requestPush();
       if(!me.username && !lsGet('vax_pass_skipped',false) && isFirstLogin){
@@ -1229,15 +1246,97 @@ function openStartDm(){
 // ── PROFILE ───────────────────────────────────────────
 function openProfile(){
   if(!me) return;
-  document.getElementById('profileAv').style.background=me.color;
-  document.getElementById('profileAv').textContent=ini(me.name);
+  const av=document.getElementById('profileAv');
+  const savedAvatar=lsGet('vax_avatar_'+me.id, null);
+  if(savedAvatar){
+    av.innerHTML=`<img src="${savedAvatar}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`;
+  } else {
+    av.style.background=me.color;
+    av.innerHTML=ini(me.name);
+  }
   document.getElementById('profileName').textContent=me.name;
+  document.getElementById('profileUsername').textContent=me.username||'—';
   document.getElementById('profileId').textContent=me.id;
-  const hasPass=!!lsGet('vax_pass','');
-  document.getElementById('profilePassStatus').innerHTML=hasPass
-    ? '<span style="color:var(--green)">🔐 Пароль встановлено</span>'
-    : '<span style="color:var(--accent3)">⚠️ Пароль не встановлено</span>';
+  const hasPass=!!lsGet('vax_auth',null)?.password;
+  document.getElementById('profilePassStatus').innerHTML=
+    `<span style="color:var(--green)">🔐 Акаунт захищено</span>`;
   openSheet('profile');
+}
+
+// ── AVATAR ────────────────────────────────────────────
+function uploadAvatar(inp){
+  const file=inp.files[0]; if(!file) return;
+  if(file.size>2*1024*1024){toast('Фото занадто велике (макс 2МБ)');return;}
+  const r=new FileReader();
+  r.onload=e=>{
+    const data=e.target.result;
+    lsSet('vax_avatar_'+me.id, data);
+    // Update avatar everywhere
+    const av=document.getElementById('profileAv');
+    av.innerHTML=`<img src="${data}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`;
+    updateMyAvatar(data);
+    toast('✅ Фото профілю оновлено!');
+  };
+  r.readAsDataURL(file);
+  inp.value='';
+}
+
+function updateMyAvatar(imgData){
+  const myAv=document.getElementById('myAv');
+  if(imgData){
+    myAv.innerHTML=`<img src="${imgData}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`;
+  } else {
+    myAv.style.background=me.color;
+    myAv.textContent=ini(me.name);
+  }
+}
+
+// ── LANGUAGE ──────────────────────────────────────────
+const LANGS = {
+  uk: {
+    groups:'ГРУПИ', dms:'ОСОБИСТІ', settings:'НАЛАШТУВАННЯ',
+    newLogin:'Новий логін', newName:'Нове ім\'я', newPass:'Новий пароль',
+    confirmPass:'Підтвердити пароль', language:'Мова інтерфейсу',
+    cancel:'Скасувати', save:'Зберегти', logout:'🚪 Вийти з акаунту',
+    myProfile:'МІЙ ПРОФІЛЬ', message:'Повідомлення...',
+  },
+  en: {
+    groups:'GROUPS', dms:'DIRECT', settings:'SETTINGS',
+    newLogin:'New login', newName:'New name', newPass:'New password',
+    confirmPass:'Confirm password', language:'Interface language',
+    cancel:'Cancel', save:'Save', logout:'🚪 Log out',
+    myProfile:'MY PROFILE', message:'Message...',
+  }
+};
+
+function setLang(lang){
+  lsSet('vax_lang', lang);
+  applyLang(lang);
+  document.getElementById('langUk').className='sheet-btn '+(lang==='uk'?'ok':'cancel');
+  document.getElementById('langEn').className='sheet-btn '+(lang==='en'?'ok':'cancel');
+  toast(lang==='uk'?'🇺🇦 Українська мова':'🇬🇧 English language');
+}
+
+function applyLang(lang){
+  const t=LANGS[lang]||LANGS.uk;
+  document.getElementById('tabGroups').textContent=t.groups;
+  document.getElementById('tabDms').textContent=t.dms;
+  const msgInp=document.getElementById('msgInp');
+  if(msgInp) msgInp.placeholder=t.message;
+  const el=(id,txt)=>{const e=document.getElementById(id);if(e)e.textContent=txt;};
+  el('s_settings',t.settings);
+  el('s_new_login',t.newLogin);
+  el('s_new_name',t.newName);
+  el('s_new_pass',t.newPass);
+  el('s_confirm_pass',t.confirmPass);
+  el('s_language',t.language);
+  el('s_cancel_btn',t.cancel);
+  el('s_save_btn',t.save);
+  el('s_logout_btn',t.logout);
+  el('s_my_profile',t.myProfile);
+  // Lang buttons
+  document.getElementById('langUk').className='sheet-btn '+(lang==='uk'?'ok':'cancel');
+  document.getElementById('langEn').className='sheet-btn '+(lang==='en'?'ok':'cancel');
 }
 
 function openSettings(){
