@@ -134,8 +134,30 @@ body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradie
 .msg-action-btn:hover{color:var(--text);background:var(--hover)}
 .msg-action-btn.del:hover{color:var(--accent3)}
 
+/* POLL */
+.poll-bubble{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:12px 14px;max-width:min(300px,70vw);margin-top:4px}
+.poll-question{font-size:14px;font-weight:600;margin-bottom:10px;line-height:1.4}
+.poll-option{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;border:1px solid var(--border);margin-bottom:6px;cursor:pointer;transition:all .15s;position:relative;overflow:hidden}
+.poll-option:active{transform:scale(.98)}
+.poll-option.voted{border-color:var(--accent);background:rgba(0,229,255,.08)}
+.poll-option-bar{position:absolute;left:0;top:0;bottom:0;background:rgba(0,229,255,.1);border-radius:8px;transition:width .3s ease;z-index:0}
+.poll-option-text{position:relative;z-index:1;flex:1;font-size:13px}
+.poll-option-pct{position:relative;z-index:1;font-size:11px;font-family:'Share Tech Mono',monospace;color:var(--muted)}
+.poll-total{font-size:11px;color:var(--dim);font-family:'Share Tech Mono',monospace;margin-top:6px}
+
 /* LAST SEEN */
 .last-seen{font-size:10px;color:var(--muted);font-family:'Share Tech Mono',monospace}
+
+/* POLL */
+.poll-bubble{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:12px 14px;max-width:min(300px,72vw);margin-top:4px}
+.poll-question{font-size:14px;font-weight:600;margin-bottom:10px;line-height:1.4}
+.poll-option{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;cursor:pointer;transition:background .15s;position:relative;overflow:hidden;margin-bottom:5px;border:1px solid var(--border)}
+.poll-option:active{transform:scale(.98)}
+.poll-option.voted{border-color:var(--accent)}
+.poll-bar{position:absolute;left:0;top:0;height:100%;background:rgba(0,229,255,.08);transition:width .4s ease;z-index:0;border-radius:8px}
+.poll-opt-text{position:relative;z-index:1;font-size:13px;flex:1}
+.poll-pct{position:relative;z-index:1;font-size:11px;font-family:'Share Tech Mono',monospace;color:var(--muted)}
+.poll-total{font-size:10px;color:var(--dim);font-family:'Share Tech Mono',monospace;margin-top:6px;text-align:right}
 
 /* TYPING */
 .typing-bar{padding:4px 14px 6px;font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--muted);min-height:22px;display:flex;align-items:center;gap:6px}
@@ -355,9 +377,31 @@ body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradie
       <input type="file" id="stickerInp" accept="image/*" onchange="addCustomSticker(this)" style="display:none">
       <textarea class="msg-inp" id="msgInp" placeholder="Повідомлення..." rows="1"
         onkeydown="handleKey(event)" oninput="onType(this)"></textarea>
+      <button class="attach-btn" id="pollBtn" onclick="openCreatePoll()" title="Опитування" style="display:none">📊</button>
       <button class="attach-btn" onclick="toggleEmojiPanel()" id="emojiBtn">😊</button>
     </div>
     <button class="send-btn" onclick="sendMsg()">➤</button>
+  </div>
+</div>
+
+<!-- Create Poll -->
+<div class="overlay" id="createPollSheet" onclick="if(event.target===this)closeSheet('createPoll')">
+  <div class="sheet">
+    <div class="sheet-title">📊 ОПИТУВАННЯ</div>
+    <div><div class="lbl" style="margin-bottom:6px">Питання</div>
+    <input class="sheet-inp" id="pollQuestion" placeholder="Введи питання..." maxlength="200"></div>
+    <div>
+      <div class="lbl" style="margin-bottom:6px">Варіанти відповідей</div>
+      <div id="pollOptions" style="display:flex;flex-direction:column;gap:6px">
+        <input class="sheet-inp poll-opt" placeholder="Варіант 1..." maxlength="100">
+        <input class="sheet-inp poll-opt" placeholder="Варіант 2..." maxlength="100">
+      </div>
+      <button onclick="addPollOption()" style="background:none;border:1px dashed var(--border);color:var(--muted);padding:8px;border-radius:8px;cursor:pointer;font-size:13px;margin-top:6px;width:100%">+ Додати варіант</button>
+    </div>
+    <div class="sheet-btns">
+      <button class="sheet-btn cancel" onclick="closeSheet('createPoll')">Скасувати</button>
+      <button class="sheet-btn ok" onclick="confirmCreatePoll()">Опублікувати</button>
+    </div>
   </div>
 </div>
 
@@ -452,6 +496,27 @@ body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradie
       <button class="sheet-btn ok" onclick="saveSettings()" id="s_save_btn">Зберегти</button>
     </div>
     <button class="sheet-btn danger" style="margin-top:4px" onclick="logout()" id="s_logout_btn">🚪 Вийти з акаунту</button>
+  </div>
+</div>
+
+<!-- Poll create -->
+<div class="overlay" id="createPollSheet" onclick="if(event.target===this)closeSheet('createPoll')">
+  <div class="sheet">
+    <div class="sheet-title">📊 НОВЕ ОПИТУВАННЯ</div>
+    <div><div class="lbl" style="margin-bottom:6px">Питання</div>
+    <input class="sheet-inp" id="pollQuestion" placeholder="Введи питання..." maxlength="200"></div>
+    <div>
+      <div class="lbl" style="margin-bottom:6px">Варіанти відповідей</div>
+      <div id="pollOptions" style="display:flex;flex-direction:column;gap:6px">
+        <input class="sheet-inp poll-opt" placeholder="Варіант 1..." maxlength="100">
+        <input class="sheet-inp poll-opt" placeholder="Варіант 2..." maxlength="100">
+      </div>
+      <button class="sheet-btn cancel" style="margin-top:8px;font-size:13px" onclick="addPollOption()">+ Додати варіант</button>
+    </div>
+    <div class="sheet-btns">
+      <button class="sheet-btn cancel" onclick="closeSheet('createPoll')">Скасувати</button>
+      <button class="sheet-btn ok" onclick="confirmCreatePoll()">Створити</button>
+    </div>
   </div>
 </div>
 
@@ -662,7 +727,18 @@ function handle(msg){
       groupHistories[msg.groupId]=msg.messages;
       if(groups[msg.groupId]) Object.assign(groups[msg.groupId], msg.info);
       if(currentChat&&currentChat.type==='group'&&currentChat.id===msg.groupId){
-        renderMessages(msg.messages);
+        // Merge messages and polls by time
+        const items=[
+          ...msg.messages.map(m=>({...m,_type:'msg'})),
+          ...(msg.polls||[]).map(p=>({...p,_type:'poll'}))
+        ].sort((a,b)=>a.time>b.time?1:-1);
+        const el=document.getElementById('messages');
+        el.innerHTML='<div class="date-sep">СЬОГОДНІ</div>';
+        items.forEach(item=>{
+          if(item._type==='poll') appendPoll(item,false);
+          else appendMsg(item,false);
+        });
+        scrollBottom();
         updateChatStatus();
       }
       break;
@@ -729,8 +805,62 @@ function handle(msg){
       if(currentChat?.type==='dm'&&currentChat?.id===msg.user.id) updateChatStatus();
       break;
 
+    case 'poll':
+      pollData[msg.poll.id]=msg.poll;
+      if(currentChat?.type==='group'&&currentChat?.id===msg.poll.groupId){
+        appendPoll(msg.poll);
+      }
+      break;
+
+    case 'poll_updated':
+      if(pollData[msg.pollId]){
+        pollData[msg.pollId].votes=msg.votes;
+        const wrap=document.querySelector(`[data-poll-id="${msg.pollId}"]`);
+        if(wrap){
+          const pollDiv=wrap.querySelector('.poll-bubble')?.parentElement;
+          if(pollDiv) renderPoll(pollData[msg.pollId], pollDiv);
+        }
+      }
+      break;
+
+    case 'poll':
+      if(currentChat?.type==='group'&&currentChat?.id===msg.groupId){
+        const pollMsg={id:msg.poll.id, from:msg.poll.from, msgType:'poll', poll:msg.poll, time:msg.poll.time};
+        appendMsg(pollMsg, true);
+      }
+      break;
+
+    case 'poll_updated':
+      // Update poll votes in DOM
+      const pollWrap=document.querySelector(`[data-msg-id="${msg.pollId}"]`);
+      if(pollWrap){
+        const pollEl=pollWrap.querySelector('.poll-bubble');
+        if(pollEl){
+          // Find the poll msg and re-render
+          const allMsgs=[...Object.values(groupHistories).flat(),...Object.values(dmHistories).flat()];
+          const pollMsg=allMsgs.find(m=>m.id===msg.pollId);
+          if(pollMsg){ pollMsg.poll={...pollMsg.poll, votes:msg.votes}; pollEl.outerHTML=renderPollBubble(pollMsg); }
+        }
+      }
+      break;
+
     case 'msg_edited':
-      updateMsgLocally(msg.msgId,'edited',{text:msg.newText});
+      // Fix edit - find text div properly
+      (()=>{
+        const wrap=document.querySelector(`[data-msg-id="${msg.msgId}"]`);
+        if(!wrap) return;
+        const bubble=wrap.querySelector('.bubble');
+        if(!bubble) return;
+        for(const child of bubble.children){
+          if(child.tagName==='DIV'&&!child.classList.contains('bubble-name')&&
+             !child.classList.contains('bubble-time')&&!child.classList.contains('reactions')&&
+             !child.classList.contains('bubble-reply')&&!child.classList.contains('poll-bubble')){
+            child.innerHTML=linkify(esc(msg.newText)); break;
+          }
+        }
+        const timeEl=bubble.querySelector('.bubble-time');
+        if(timeEl&&!timeEl.querySelector('.edited-mark')) timeEl.innerHTML+=` <span class="edited-mark">ред.</span>`;
+      })();
       break;
 
     case 'msg_deleted':
@@ -838,12 +968,14 @@ function openGroup(id){
   const g=groups[id]; if(!g) return;
   currentChat={type:'group',id};
   unread[id]=0;
+  document.getElementById('pollBtn').style.display='flex'; // show poll button in groups
   document.getElementById('chatPeerAv').textContent=g.emoji||'💬';
   document.getElementById('chatPeerAv').style.background='linear-gradient(135deg,var(--accent2),var(--accent))';
   document.getElementById('chatPeerAv').className='chat-peer-av group';
   document.getElementById('chatPeerName').textContent=g.name;
   document.getElementById('chatPeerStatus').textContent=(g.memberCount||0)+' учасників';
   document.getElementById('chatPeerStatus').className='chat-peer-status';
+  document.getElementById('pollBtn').style.display='flex';
   // Show cached messages first
   const cached=groupHistories[id]||[];
   renderMessages(cached);
@@ -857,10 +989,12 @@ function openDm(id){
   const c=contacts[id]||{id,name:'?',color:'#888',online:false};
   currentChat={type:'dm',id};
   unread[id]=0;
+  document.getElementById('pollBtn').style.display='none'; // hide poll button in DMs
   document.getElementById('chatPeerAv').textContent=ini(c.name);
   document.getElementById('chatPeerAv').style.background=c.color;
   document.getElementById('chatPeerAv').className='chat-peer-av';
   document.getElementById('chatPeerName').textContent=c.name;
+  document.getElementById('pollBtn').style.display='none';
   updateChatStatus();
   // Show cached
   if(!dmHistories[id]) dmHistories[id]=loadDm(id);
@@ -905,7 +1039,9 @@ function appendMsg(msg, doScroll=true){
   }
 
   let bodyContent='';
-  if(msg.msgType==='sticker'){
+  if(msg.msgType==='poll'){
+    bodyContent = renderPollBubble(msg);
+  } else if(msg.msgType==='sticker'){
     bodyContent=`<img class="bubble-sticker" src="${msg.imageData}" onclick="openLb('${msg.imageData}')" alt="стікер">`;
   } else if(msg.msgType==='audio'){
     const name=msg.fileName||'аудіо';
@@ -1052,6 +1188,78 @@ function sendFile(inp){
   inp.value='';
 }
 
+// ── POLLS ─────────────────────────────────────────────
+const pollData = {}; // pollId → poll object
+
+function openCreatePoll(){
+  document.getElementById('pollQuestion').value='';
+  const opts=document.getElementById('pollOptions');
+  opts.innerHTML='<input class="sheet-inp poll-opt" placeholder="Варіант 1..." maxlength="100"><input class="sheet-inp poll-opt" placeholder="Варіант 2..." maxlength="100">';
+  openSheet('createPoll');
+}
+
+function addPollOption(){
+  const opts=document.getElementById('pollOptions');
+  if(opts.children.length>=6){toast('Максимум 6 варіантів');return;}
+  const inp=document.createElement('input');
+  inp.className='sheet-inp poll-opt';
+  inp.placeholder=`Варіант ${opts.children.length+1}...`;
+  inp.maxLength=100;
+  opts.appendChild(inp);
+}
+
+function confirmCreatePoll(){
+  const q=document.getElementById('pollQuestion').value.trim();
+  if(!q){toast('Введи питання');return;}
+  const options=[...document.querySelectorAll('.poll-opt')].map(i=>i.value.trim()).filter(Boolean);
+  if(options.length<2){toast('Потрібно мінімум 2 варіанти');return;}
+  ws.send(JSON.stringify({type:'create_poll',groupId:currentChat.id,question:q,options}));
+  closeSheet('createPoll');
+}
+
+function renderPoll(poll, container){
+  const totalVotes=Object.values(poll.votes||{}).reduce((s,v)=>s+(Array.isArray(v)?v.length:0),0);
+  const myVote=Object.entries(poll.votes||{}).find(([,v])=>Array.isArray(v)&&v.includes(me?.id));
+  const myIdx=myVote?parseInt(myVote[0]):-1;
+  container.innerHTML=`
+    <div class="poll-bubble">
+      <div class="poll-question">📊 ${esc(poll.question)}</div>
+      ${(poll.options||[]).map((opt,i)=>{
+        const votes=Array.isArray(poll.votes?.[i])?poll.votes[i].length:0;
+        const pct=totalVotes?Math.round(votes/totalVotes*100):0;
+        const isVoted=myIdx===i;
+        return `<div class="poll-option${isVoted?' voted':''}" onclick="votePoll('${poll.id}',${i})">
+          <div class="poll-option-bar" style="width:${pct}%"></div>
+          <span class="poll-option-text">${isVoted?'✓ ':''} ${esc(opt)}</span>
+          <span class="poll-option-pct">${pct}%</span>
+        </div>`;
+      }).join('')}
+      <div class="poll-total">${totalVotes} голос${totalVotes===1?'':totalVotes<5?'и':'ів'}</div>
+    </div>`;
+}
+
+function votePoll(pollId, optIdx){
+  ws.send(JSON.stringify({type:'poll_vote',pollId,optionIdx:optIdx}));
+}
+
+function appendPoll(poll, doScroll=true){
+  pollData[poll.id]=poll;
+  const el=document.getElementById('messages');
+  const isMe=poll.from.id===me?.id;
+  const wrap=document.createElement('div');
+  wrap.className='msg-wrap fadein'+(isMe?' mine':'');
+  wrap.dataset.pollId=poll.id;
+  const inner=document.createElement('div');
+  inner.style.position='relative';
+  if(!isMe) inner.innerHTML=`<div class="msg-small-av" style="background:${poll.from.color||'#888'}">${ini(poll.from.name)}</div>`;
+  const pollDiv=document.createElement('div');
+  renderPoll(poll, pollDiv);
+  inner.appendChild(pollDiv);
+  wrap.appendChild(inner);
+  el.appendChild(wrap);
+  if(doScroll) scrollBottom();
+}
+
 // ── REPLY ─────────────────────────────────────────────
 function startReply(msgId, preview){
   replyingTo={id:msgId, preview};
@@ -1083,25 +1291,28 @@ function deleteMsg(msgId){
 function updateMsgLocally(msgId, action, data={}){
   const wrap=document.querySelector(`[data-msg-id="${msgId}"]`);
   if(!wrap) return;
+  // For mine: bubble is direct child. For theirs: bubble is inside nested div
   const bubble=wrap.querySelector('.bubble');
   if(!bubble) return;
   if(action==='deleted'){
-    bubble.classList.add('deleted');
+    bubble.className=`bubble ${wrap.classList.contains('mine')?'mine':'theirs'} deleted`;
     bubble.innerHTML='🗑 Повідомлення видалено';
   } else if(action==='edited'){
-    // For mine: bubble is direct child. For theirs: bubble is inside a nested div
-    const bubble2 = wrap.querySelector('.bubble') || wrap.querySelector('.bubble.mine') || wrap.querySelector('.bubble.theirs');
-    if(!bubble2) return;
-    // The text content div is the last direct div child that's not bubble-name, bubble-time, reactions, bubble-reply
-    const candidates = Array.from(bubble2.children);
-    const textDiv = candidates.find(d => d.tagName==='DIV' && !d.classList.contains('bubble-name') && !d.classList.contains('bubble-time') && !d.classList.contains('reactions') && !d.classList.contains('bubble-reply'));
-    if(textDiv) textDiv.innerHTML = linkify(esc(data.text));
-    const timeEl = bubble2.querySelector('.bubble-time');
-    if(timeEl && !timeEl.querySelector('.edited-mark')) timeEl.innerHTML += ` <span class="edited-mark">ред.</span>`;
+    // Find text div - direct children of bubble that are not special classes
+    const kids=Array.from(bubble.children);
+    const textDiv=kids.find(d=>d.tagName==='DIV'&&
+      !d.classList.contains('bubble-name')&&
+      !d.classList.contains('bubble-time')&&
+      !d.classList.contains('reactions')&&
+      !d.classList.contains('bubble-reply')&&
+      !d.classList.contains('msg-actions'));
+    if(textDiv) textDiv.innerHTML=linkify(esc(data.text));
+    const timeEl=bubble.querySelector('.bubble-time');
+    if(timeEl&&!timeEl.querySelector('.edited-mark')) timeEl.innerHTML+=` <span class="edited-mark">ред.</span>`;
   } else if(action==='reacted'){
     let reactDiv=bubble.querySelector('.reactions');
     const html=renderReactions(msgId, data.reactions, wrap.classList.contains('mine'));
-    if(reactDiv) reactDiv.outerHTML=html||'<span></span>';
+    if(reactDiv) reactDiv.outerHTML=html||'<div></div>';
     else if(html){ const timeEl=bubble.querySelector('.bubble-time'); if(timeEl) timeEl.insertAdjacentHTML('afterend',html); }
   }
 }
@@ -1367,8 +1578,64 @@ async function saveSettings(){
   closeSheet('settings');
 }
 
+// ── POLLS ─────────────────────────────────────────────
+function openCreatePoll(){
+  if(currentChat?.type!=='group'){ toast('Опитування тільки в групах'); return; }
+  document.getElementById('pollQuestion').value='';
+  document.querySelectorAll('.poll-opt').forEach((o,i)=>{o.value='';});
+  openSheet('createPoll');
+}
+
+function addPollOption(){
+  const container=document.getElementById('pollOptions');
+  const count=container.querySelectorAll('.poll-opt').length;
+  if(count>=6){toast('Максимум 6 варіантів');return;}
+  const inp=document.createElement('input');
+  inp.className='sheet-inp poll-opt';
+  inp.placeholder=`Варіант ${count+1}...`;
+  inp.maxLength=100;
+  container.appendChild(inp);
+}
+
+function confirmCreatePoll(){
+  const question=document.getElementById('pollQuestion').value.trim();
+  if(!question){toast('Введи питання');return;}
+  const options=Array.from(document.querySelectorAll('.poll-opt')).map(i=>i.value.trim()).filter(Boolean);
+  if(options.length<2){toast('Потрібно мінімум 2 варіанти');return;}
+  ws.send(JSON.stringify({type:'create_poll', groupId:currentChat.id, question, options}));
+  closeSheet('createPoll');
+}
+
+function renderPollBubble(msg){
+  const p=msg.poll||msg;
+  const votes=p.votes||{};
+  const totalVotes=Object.values(votes).reduce((s,v)=>s+(Array.isArray(v)?v.length:0),0);
+  const myVote=Object.entries(votes).find(([,uids])=>Array.isArray(uids)&&uids.includes(me?.id));
+  const myIdx=myVote?parseInt(myVote[0]):-1;
+  const pollId=p.id||msg.id;
+  const opts=(p.options||[]).map((opt,i)=>{
+    const cnt=Array.isArray(votes[i])?votes[i].length:0;
+    const pct=totalVotes?Math.round(cnt/totalVotes*100):0;
+    const isVoted=myIdx===i;
+    return `<div class="poll-option${isVoted?' voted':''}" onclick="votePoll('${pollId}',${i})">
+      <div class="poll-bar" style="width:${pct}%"></div>
+      <span class="poll-opt-text">${isVoted?'✓ ':''} ${esc(opt)}</span>
+      <span class="poll-pct">${totalVotes?pct+'%':''}</span>
+    </div>`;
+  }).join('');
+  return `<div class="poll-bubble">
+    <div class="poll-question">📊 ${esc(p.question||'')}</div>
+    ${opts}
+    <div class="poll-total">${totalVotes} голос${totalVotes===1?'':'ів'}</div>
+  </div>`;
+}
+
+function votePoll(pollId, optIdx){
+  if(!ws||ws.readyState!==1) return;
+  ws.send(JSON.stringify({type:'poll_vote', pollId, optionIdx:optIdx}));
+}
+
 // ── ATTACH MENU ───────────────────────────────────────
-function toggleAttachMenu(e){
   if(e) e.stopPropagation();
   const m=document.getElementById('attachMenu');
   const isOpen=m.style.display==='flex';
