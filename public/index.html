@@ -18,6 +18,15 @@
   --accent:#00e5ff;--accent2:#7b2fff;--accent3:#ff2d78;
   --green:#00ff88;--text:#e8f0ff;--muted:#4a6080;--dim:#2a3a55;--border:#1a2a45;
 }
+body.theme-black{
+  --bg:#000000;--panel:#0a0a0a;--card:#111111;--hover:#1a1a1a;
+  --border:#222222;--muted:#555555;--dim:#333333;--text:#ffffff;
+}
+body.theme-light{
+  --bg:#f0f4f8;--panel:#ffffff;--card:#e8edf5;--hover:#dde4ef;
+  --accent:#0088cc;--accent2:#6600cc;--accent3:#cc0055;
+  --green:#00aa55;--text:#1a2a3a;--muted:#6a7a8a;--dim:#aab0bb;--border:#ccd4e0;
+}
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;overflow:hidden;background:var(--bg)}
 body{font-family:'Exo 2',sans-serif;color:var(--text);display:flex;flex-direction:column}
@@ -133,6 +142,17 @@ body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradie
 .msg-action-btn{background:none;border:none;font-size:14px;cursor:pointer;padding:3px 5px;border-radius:5px;color:var(--muted);transition:color .1s}
 .msg-action-btn:hover{color:var(--text);background:var(--hover)}
 .msg-action-btn.del:hover{color:var(--accent3)}
+
+/* VOICE MESSAGE */
+.voice-bubble{display:flex;align-items:center;gap:10px;padding:8px 12px;min-width:180px;max-width:260px}
+.voice-play{width:36px;height:36px;border-radius:50%;background:var(--accent2);border:none;color:#fff;font-size:14px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center}
+.voice-play:active{transform:scale(.93)}
+.voice-waveform{flex:1;height:28px;display:flex;align-items:center;gap:2px;overflow:hidden}
+.voice-bar{width:3px;border-radius:2px;background:var(--accent);opacity:.5}
+.voice-duration{font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--muted);min-width:32px;text-align:right}
+.rec-btn{background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer;padding:8px;flex-shrink:0}
+.rec-btn.recording{color:var(--accent3)!important;animation:recpulse 1s infinite}
+@keyframes recpulse{0%,100%{opacity:1}50%{opacity:.3}}
 
 /* POLL */
 .poll-bubble{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:12px 14px;max-width:min(300px,70vw);margin-top:4px}
@@ -384,6 +404,7 @@ body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradie
       <textarea class="msg-inp" id="msgInp" placeholder="Повідомлення..." rows="1"
         onkeydown="handleKey(event)" oninput="onType(this)"></textarea>
       <button class="attach-btn" id="pollBtn" onclick="openCreatePoll()" title="Опитування" style="display:none">📊</button>
+      <button class="rec-btn" id="recBtn" onclick="toggleRecording()" title="Голосове повідомлення">🎤</button>
       <button class="attach-btn" onclick="toggleEmojiPanel()" id="emojiBtn">😊</button>
     </div>
     <button class="send-btn" onclick="sendMsg()">➤</button>
@@ -497,6 +518,14 @@ body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradie
         <button id="langEn" class="sheet-btn cancel" style="flex:1" onclick="setLang('en')">🇬🇧 English</button>
       </div>
     </div>
+    <div>
+      <div class="lbl" style="margin-bottom:6px">Тема оформлення</div>
+      <div style="display:flex;gap:8px">
+        <button id="themeDefault" class="sheet-btn ok" style="flex:1;font-size:12px" onclick="setTheme('default')">🌌 Стандартна</button>
+        <button id="themeBlack" class="sheet-btn cancel" style="flex:1;font-size:12px" onclick="setTheme('black')">⬛ Чорна</button>
+        <button id="themeLight" class="sheet-btn cancel" style="flex:1;font-size:12px" onclick="setTheme('light')">☀️ Біла</button>
+      </div>
+    </div>
     <div class="sheet-btns">
       <button class="sheet-btn cancel" onclick="closeSheet('settings')" id="s_cancel_btn">Скасувати</button>
       <button class="sheet-btn ok" onclick="saveSettings()" id="s_save_btn">Зберегти</button>
@@ -590,6 +619,8 @@ async function hashPass(pass){
 
 // ── BOOT ──────────────────────────────────────────────
 window.addEventListener('DOMContentLoaded',()=>{
+  // Apply saved theme
+  applyTheme();
   // Apply saved language
   const savedLang=lsGet('vax_lang','uk');
   applyLang(savedLang);
@@ -964,6 +995,11 @@ function handle(msg){
 
     case 'error':
       toast('❌ ' + msg.text);
+      if(msg.text.includes('дозволу') && currentChat?.type==='group'){
+        document.getElementById('msgInp').placeholder='📢 Тільки для читання';
+        document.getElementById('msgInp').disabled=true;
+        document.getElementById('recBtn').style.display='none';
+      }
       break;
 
     case 'dm_typing':
@@ -1058,6 +1094,11 @@ function openGroup(id){
   document.getElementById('chatPeerStatus').className='chat-peer-status';
   document.getElementById('pollBtn').style.display='flex';
   document.getElementById('callBtn').style.display='none';
+  // Reset input state
+  const inp=document.getElementById('msgInp');
+  inp.disabled=false;
+  inp.placeholder='Повідомлення...';
+  document.getElementById('recBtn').style.display='flex';
   // Show cached messages first
   const cached=groupHistories[id]||[];
   renderMessages(cached);
@@ -1125,6 +1166,17 @@ function appendMsg(msg, doScroll=true){
     bodyContent = renderPollBubble(msg);
   } else if(msg.msgType==='sticker'){
     bodyContent=`<img class="bubble-sticker" src="${msg.imageData}" onclick="openLb('${msg.imageData}')" alt="стікер">`;
+  } else if(msg.msgType==='voice'){
+    const dur = msg.duration||0;
+    const durStr = `0:${String(dur).padStart(2,'0')}`;
+    const uid = 'v'+Math.random().toString(36).slice(2,8);
+    // Generate fake waveform bars
+    const bars = Array.from({length:30},()=>`<div class="voice-bar" style="height:${4+Math.random()*20}px"></div>`).join('');
+    bodyContent=`<div class="voice-bubble">
+      <button class="voice-play" id="${uid}" onclick="playVoice(this,'${msg.imageData}',document.getElementById('${uid}d'))">▶</button>
+      <div class="voice-waveform">${bars}</div>
+      <span class="voice-duration" id="${uid}d">${durStr}</span>
+    </div>`;
   } else if(msg.msgType==='audio'){
     const name=msg.fileName||'аудіо';
     bodyContent=`<div style="margin-top:4px;max-width:260px"><div style="font-size:11px;color:var(--muted);margin-bottom:4px;font-family:'Share Tech Mono',monospace">🎵 ${esc(name)}</div><audio controls style="width:100%;outline:none;border-radius:8px" src="${msg.imageData}"></audio></div>`;
@@ -1584,6 +1636,89 @@ function updateMyAvatar(imgData){
     myAv.style.background=me.color;
     myAv.textContent=ini(me.name);
   }
+}
+
+// ── THEMES ────────────────────────────────────────────
+function setTheme(theme){
+  document.body.className = theme==='default' ? '' : `theme-${theme}`;
+  lsSet('vax_theme', theme);
+  document.getElementById('themeDefault').className='sheet-btn '+(theme==='default'?'ok':'cancel');
+  document.getElementById('themeBlack').className='sheet-btn '+(theme==='black'?'ok':'cancel');
+  document.getElementById('themeLight').className='sheet-btn '+(theme==='light'?'ok':'cancel');
+  // Update meta theme-color
+  const colors={default:'#050810', black:'#000000', light:'#f0f4f8'};
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', colors[theme]||'#050810');
+}
+
+function applyTheme(){
+  const t=lsGet('vax_theme','default');
+  setTheme(t);
+}
+
+// ── VOICE MESSAGES ────────────────────────────────────
+let mediaRecorder=null, audioChunks=[], isRecording=false, recStartTime=0;
+
+async function toggleRecording(){
+  if(isRecording){ stopRecording(); return; }
+  try{
+    const stream = await navigator.mediaDevices.getUserMedia({audio:true});
+    mediaRecorder = new MediaRecorder(stream);
+    audioChunks = [];
+    recStartTime = Date.now();
+    mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+    mediaRecorder.onstop = sendVoiceMsg;
+    mediaRecorder.start();
+    isRecording = true;
+    document.getElementById('recBtn').classList.add('recording');
+    document.getElementById('recBtn').textContent = '⏹';
+    toast('🔴 Запис...');
+  } catch(e){ toast('❌ Немає доступу до мікрофону'); }
+}
+
+function stopRecording(){
+  if(!mediaRecorder) return;
+  mediaRecorder.stop();
+  mediaRecorder.stream.getTracks().forEach(t=>t.stop());
+  isRecording=false;
+  document.getElementById('recBtn').classList.remove('recording');
+  document.getElementById('recBtn').textContent='🎤';
+}
+
+async function sendVoiceMsg(){
+  const blob = new Blob(audioChunks, {type:'audio/webm'});
+  if(blob.size < 1000){ toast('Занадто коротко'); return; }
+  const duration = Math.round((Date.now()-recStartTime)/1000);
+  const reader = new FileReader();
+  reader.onload = e => {
+    const data = e.target.result;
+    const msg = {id:'t'+Date.now(), from:{id:me.id,name:me.name,color:me.color}, imageData:data, fileName:`voice_${duration}s.webm`, fileType:'audio/webm', msgType:'voice', duration, time:new Date().toISOString()};
+    if(currentChat.type==='group'){
+      ws.send(JSON.stringify({type:'group_img', groupId:currentChat.id, imageData:data, fileName:msg.fileName, fileType:'audio/webm'}));
+      appendMsg(msg);
+    } else {
+      ws.send(JSON.stringify({type:'dm_img', toId:currentChat.id, imageData:data, fileName:msg.fileName, fileType:'audio/webm'}));
+      appendMsg(msg);
+      if(!dmHistories[currentChat.id]) dmHistories[currentChat.id]=[];
+      dmHistories[currentChat.id].push(msg);
+      saveDm(currentChat.id, dmHistories[currentChat.id]);
+    }
+  };
+  reader.readAsDataURL(blob);
+}
+
+// ── VOICE PLAYER ──────────────────────────────────────
+function playVoice(btn, src, durationEl){
+  const audio = btn._audio || (btn._audio = new Audio(src));
+  if(!audio.paused){ audio.pause(); btn.textContent='▶'; return; }
+  // Stop all other voice messages
+  document.querySelectorAll('.voice-play').forEach(b=>{ if(b!==btn&&b._audio) b._audio.pause(); b.textContent='▶'; });
+  audio.play();
+  btn.textContent='⏸';
+  audio.ontimeupdate = ()=>{
+    const left = Math.round(audio.duration-audio.currentTime)||0;
+    if(durationEl) durationEl.textContent = `0:${String(left).padStart(2,'0')}`;
+  };
+  audio.onended = ()=>{ btn.textContent='▶'; };
 }
 
 // ── LANGUAGE ──────────────────────────────────────────
