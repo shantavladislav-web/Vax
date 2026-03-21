@@ -1,4 +1,4 @@
-const CACHE = 'vax-v2';
+const CACHE = 'vax-v3';
 const ASSETS = ['/', '/manifest.json', '/icons/icon-192.png', '/icons/icon-512.png'];
 
 self.addEventListener('install', e => {
@@ -19,9 +19,10 @@ self.addEventListener('fetch', e => {
 });
 
 // ── NOTIFICATIONS FROM MAIN PAGE ──────────────────────
-// The main page sends messages to SW to show notifications
 self.addEventListener('message', e => {
-  if (e.data && e.data.type === 'NOTIFY') {
+  if (!e.data) return;
+
+  if (e.data.type === 'NOTIFY') {
     const { title, body, tag } = e.data;
     self.registration.showNotification(title, {
       body,
@@ -33,21 +34,48 @@ self.addEventListener('message', e => {
       data: { url: '/' }
     });
   }
+
+  // ── INCOMING CALL NOTIFICATION ──
+  if (e.data.type === 'CALL_NOTIFY') {
+    const { callerName, callerId } = e.data;
+    self.registration.showNotification('📞 VAX — Вхідний дзвінок', {
+      body: callerName + ' дзвонить...',
+      icon: '/icons/icon-192.png',
+      badge: '/icons/icon-192.png',
+      tag: 'vax-call',
+      renotify: true,
+      requireInteraction: true,
+      vibrate: [500, 200, 500, 200, 500],
+      actions: [
+        { action: 'accept', title: '📞 Прийняти' },
+        { action: 'reject', title: '📵 Відхилити' }
+      ],
+      data: { url: '/', callerId, callerName, type: 'call' }
+    });
+  }
 });
 
-// ── CLICK ON NOTIFICATION → OPEN APP ──────────────────
+// ── NOTIFICATION CLICK ────────────────────────────────
 self.addEventListener('notificationclick', e => {
   e.notification.close();
+  const data = e.notification.data || {};
+
   e.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {
-      // If app is open — focus it
-      for (const client of list) {
-        if (client.url.includes(self.location.origin) && 'focus' in client) {
-          return client.focus();
+      const appClient = list.find(c => c.url.includes(self.location.origin));
+
+      if (data.type === 'call') {
+        const action = e.action; // 'accept' or 'reject'
+        if (appClient) {
+          appClient.focus();
+          appClient.postMessage({ type: action === 'accept' ? 'CALL_ACCEPT' : 'CALL_REJECT', callerId: data.callerId });
+        } else {
+          clients.openWindow('/?call=' + (action === 'accept' ? 'accept' : 'reject') + '&from=' + data.callerId);
         }
+      } else {
+        if (appClient) return appClient.focus();
+        if (clients.openWindow) return clients.openWindow('/');
       }
-      // Otherwise open new window
-      if (clients.openWindow) return clients.openWindow('/');
     })
   );
 });
