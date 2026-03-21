@@ -241,7 +241,7 @@ body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradie
     <div class="logo">VA<span>X</span></div>
     <div id="connBadge" style="font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--dim);letter-spacing:1px">●</div>
     <div class="topbar-right">
-      <button class="icon-btn" onclick="openNewChat()" title="Новий чат">✏️</button>
+      <button class="icon-btn" onclick="openSettings()" title="Налаштування">⚙️</button>
       <div class="my-av" id="myAv" onclick="openProfile()"></div>
     </div>
   </div>
@@ -349,20 +349,31 @@ body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradie
 <div class="overlay" id="profileSheet" onclick="if(event.target===this)closeSheet('profile')">
   <div class="sheet">
     <div class="sheet-title">МІЙ ПРОФІЛЬ</div>
-    <div style="display:flex;align-items:center;gap:14px">
-      <div id="profileAv" style="width:56px;height:56px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:'Rajdhani',sans-serif;font-weight:700;font-size:22px;color:#fff"></div>
+    <div style="display:flex;align-items:center;gap:16px;padding:8px 0">
+      <div id="profileAv" style="width:64px;height:64px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:'Rajdhani',sans-serif;font-weight:700;font-size:26px;color:#fff;flex-shrink:0"></div>
       <div>
-        <div id="profileName" style="font-size:18px;font-weight:600"></div>
-        <div style="font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--muted);margin-top:2px">ID: <span id="profileId"></span></div>
+        <div id="profileName" style="font-size:20px;font-weight:700;letter-spacing:.5px"></div>
+        <div style="font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--muted);margin-top:4px">ID: <span id="profileId"></span></div>
+        <div id="profilePassStatus" style="font-family:'Share Tech Mono',monospace;font-size:10px;margin-top:4px"></div>
       </div>
     </div>
-    <div><div class="lbl" style="margin-bottom:6px">Змінити нікнейм</div>
-    <input class="sheet-inp" id="newNameInp" placeholder="Новий нікнейм..." maxlength="24"></div>
-    <div><div class="lbl" style="margin-bottom:6px">Змінити пароль</div>
-    <input class="sheet-inp" id="changePassInp" type="password" placeholder="Новий пароль (мін. 4 символи)..." maxlength="64"></div>
+    <button class="sheet-btn cancel" onclick="closeSheet('profile')">Закрити</button>
+  </div>
+</div>
+
+<!-- Settings -->
+<div class="overlay" id="settingsSheet" onclick="if(event.target===this)closeSheet('settings')">
+  <div class="sheet">
+    <div class="sheet-title">⚙️ НАЛАШТУВАННЯ</div>
+    <div><div class="lbl" style="margin-bottom:6px">Новий нікнейм</div>
+    <input class="sheet-inp" id="newNameInp" placeholder="Введи новий нікнейм..." maxlength="24"></div>
+    <div><div class="lbl" style="margin-bottom:6px">Новий пароль</div>
+    <input class="sheet-inp" id="changePassInp" type="password" placeholder="Мін. 4 символи..." maxlength="64"></div>
+    <div><div class="lbl" style="margin-bottom:6px">Підтвердити пароль</div>
+    <input class="sheet-inp" id="changePassInp2" type="password" placeholder="Повторіть пароль..." maxlength="64"></div>
     <div class="sheet-btns">
-      <button class="sheet-btn cancel" onclick="closeSheet('profile')">Закрити</button>
-      <button class="sheet-btn ok" onclick="saveNewName()">Зберегти</button>
+      <button class="sheet-btn cancel" onclick="closeSheet('settings')">Скасувати</button>
+      <button class="sheet-btn ok" onclick="saveSettings()">Зберегти</button>
     </div>
   </div>
 </div>
@@ -932,23 +943,45 @@ function openProfile(){
   document.getElementById('profileAv').textContent=ini(me.name);
   document.getElementById('profileName').textContent=me.name;
   document.getElementById('profileId').textContent=me.id;
-  document.getElementById('newNameInp').value='';
+  const hasPass=!!lsGet('vax_pass','');
+  document.getElementById('profilePassStatus').innerHTML=hasPass
+    ? '<span style="color:var(--green)">🔐 Пароль встановлено</span>'
+    : '<span style="color:var(--accent3)">⚠️ Пароль не встановлено</span>';
   openSheet('profile');
 }
-async function saveNewName(){
-  const name=document.getElementById('newNameInp').value.trim();
-  const newPass=document.getElementById('changePassInp').value;
-  if(name){ lsSet(LS_NAME,name); }
-  if(newPass){
-    if(newPass.length<4){toast('Пароль мінімум 4 символи');return;}
-    const hash=await hashPass(newPass);
-    lsSet('vax_pass',hash);
-    toast('✅ Пароль змінено!');
-  } else if(name) {
-    toast('Нікнейм збережено. Оновіть сторінку.');
-  }
-  closeSheet('profile');
+
+function openSettings(){
+  document.getElementById('newNameInp').value='';
   document.getElementById('changePassInp').value='';
+  document.getElementById('changePassInp2').value='';
+  openSheet('settings');
+}
+
+async function saveSettings(){
+  const name=document.getElementById('newNameInp').value.trim();
+  const p1=document.getElementById('changePassInp').value;
+  const p2=document.getElementById('changePassInp2').value;
+  let changed=false;
+
+  if(name){
+    lsSet(LS_NAME,name);
+    changed=true;
+  }
+  if(p1||p2){
+    if(p1.length<4){toast('Пароль мінімум 4 символи');return;}
+    if(p1!==p2){
+      document.getElementById('changePassInp2').classList.add('inp-err');
+      setTimeout(()=>document.getElementById('changePassInp2').classList.remove('inp-err'),800);
+      toast('Паролі не співпадають');return;
+    }
+    const hash=await hashPass(p1);
+    lsSet('vax_pass',hash);
+    changed=true;
+  }
+
+  if(!changed){toast('Нічого не змінено');return;}
+  closeSheet('settings');
+  toast('✅ Збережено! Оновіть сторінку щоб застосувати.');
 }
 
 // ── ATTACH MENU ───────────────────────────────────────
