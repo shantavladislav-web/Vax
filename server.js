@@ -541,6 +541,8 @@ wss.on('connection', ws => {
     else if (d.type === 'call_end') {
       sendTo(String(d.toId||''), { type:'call_end', fromId:userId });
     }
+
+    else if (d.type === 'ping') {
       send(ws, { type:'pong' });
     }
 
