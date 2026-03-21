@@ -104,8 +104,38 @@ body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradie
 .bubble.theirs{background:var(--card);border:1px solid var(--border);border-bottom-left-radius:4px;color:var(--text)}
 .bubble.mine{background:linear-gradient(135deg,rgba(123,47,255,.35),rgba(0,229,255,.15));border:1px solid rgba(0,229,255,.2);border-bottom-right-radius:4px;color:#ddf0ff}
 .bubble-name{font-size:11px;font-weight:600;margin-bottom:3px}
-.bubble-time{font-size:10px;color:var(--dim);font-family:'Share Tech Mono',monospace;margin-top:3px;text-align:right}
+.bubble-time{font-size:10px;color:var(--dim);font-family:'Share Tech Mono',monospace;margin-top:3px;text-align:right;display:flex;align-items:center;justify-content:flex-end;gap:4px}
 .bubble-img{max-width:min(220px,60vw);max-height:280px;border-radius:10px;display:block;cursor:pointer;margin-top:4px}
+.bubble.deleted{opacity:.5;font-style:italic;color:var(--muted)}
+.edited-mark{font-size:9px;color:var(--dim);font-family:'Share Tech Mono',monospace}
+
+/* REPLY */
+.reply-bar{display:flex;align-items:center;gap:8px;padding:8px 14px;background:var(--card);border-top:1px solid var(--border);border-left:3px solid var(--accent);font-size:12px;color:var(--muted);position:relative;margin:0 -1px}
+.reply-bar-text{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.reply-bar-close{background:none;border:none;color:var(--muted);font-size:18px;cursor:pointer;padding:0 4px}
+.bubble-reply{background:rgba(255,255,255,.06);border-left:3px solid var(--accent);border-radius:6px;padding:5px 8px;margin-bottom:5px;font-size:11px;color:var(--muted);cursor:pointer}
+.bubble-reply.mine{border-left-color:rgba(0,229,255,.6)}
+
+/* REACTIONS */
+.reactions{display:flex;flex-wrap:wrap;gap:4px;margin-top:5px}
+.reaction{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:2px 7px;font-size:13px;cursor:pointer;transition:all .15s;display:flex;align-items:center;gap:3px;user-select:none}
+.reaction:active{transform:scale(.93)}
+.reaction.mine{border-color:var(--accent);background:rgba(0,229,255,.1)}
+.reaction-count{font-size:11px;font-family:'Share Tech Mono',monospace;color:var(--muted)}
+.react-picker{position:absolute;bottom:calc(100% + 6px);background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:6px 8px;display:flex;gap:6px;box-shadow:0 4px 20px rgba(0,0,0,.4);z-index:50;white-space:nowrap}
+.react-opt{font-size:20px;cursor:pointer;padding:2px;border-radius:6px;transition:transform .1s}
+.react-opt:active{transform:scale(1.3)}
+
+/* MSG ACTIONS */
+.msg-actions{position:absolute;top:-28px;right:0;background:var(--panel);border:1px solid var(--border);border-radius:8px;display:none;gap:2px;padding:3px;z-index:20;box-shadow:0 2px 12px rgba(0,0,0,.3)}
+.msg-wrap:hover .msg-actions{display:flex}
+.msg-wrap.mine .msg-actions{right:auto;left:0}
+.msg-action-btn{background:none;border:none;font-size:14px;cursor:pointer;padding:3px 5px;border-radius:5px;color:var(--muted);transition:color .1s}
+.msg-action-btn:hover{color:var(--text);background:var(--hover)}
+.msg-action-btn.del:hover{color:var(--accent3)}
+
+/* LAST SEEN */
+.last-seen{font-size:10px;color:var(--muted);font-family:'Share Tech Mono',monospace}
 
 /* TYPING */
 .typing-bar{padding:4px 14px 6px;font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--muted);min-height:22px;display:flex;align-items:center;gap:6px}
@@ -296,6 +326,11 @@ body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradie
   </div>
   <div class="messages" id="messages"></div>
   <div class="typing-bar" id="typingBar"></div>
+  <div id="replyBar" style="display:none;align-items:center;gap:8px;padding:8px 14px;background:var(--card);border-top:1px solid var(--border);border-left:3px solid var(--accent)">
+    <span style="color:var(--accent);font-size:14px">↩</span>
+    <div id="replyBarText" style="flex:1;font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></div>
+    <button onclick="cancelReply()" style="background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer;padding:0 4px;line-height:1">×</button>
+  </div>
 
   <!-- EMOJI PANEL -->
   <div class="emoji-panel" id="emojiPanel">
@@ -647,8 +682,20 @@ function handle(msg){
       if(currentChat?.type==='dm'&&currentChat?.id===msg.user.id) updateChatStatus();
       break;
 
+    case 'msg_edited':
+      updateMsgLocally(msg.msgId,'edited',{text:msg.newText});
+      break;
+
+    case 'msg_deleted':
+      updateMsgLocally(msg.msgId,'deleted');
+      break;
+
+    case 'reactions_updated':
+      updateMsgLocally(msg.msgId,'reacted',{reactions:msg.reactions});
+      break;
+
     case 'contact_offline':
-      if(contacts[msg.userId]) contacts[msg.userId].online=false;
+      if(contacts[msg.userId]){ contacts[msg.userId].online=false; if(msg.lastSeen) contacts[msg.userId].lastSeen=msg.lastSeen; }
       renderHome();
       if(currentChat?.type==='dm'&&currentChat?.id===msg.userId) updateChatStatus();
       break;
@@ -716,7 +763,7 @@ function renderDms(){
     const preview=last?(last.msgType==='image'||last.msgType==='sticker'?'📷 Фото':(last.from.id===me?.id?'Ти: ':'')+last.text):'';
     const u=unread[c.id]||0;
     const time=last?fmtTime(last.time):'';
-    const statusText=c.online?'● онлайн':(preview?esc(preview.slice(0,40)):'офлайн');
+    const statusText=c.online?'● онлайн':c.lastSeen?'був(ла) '+fmtLastSeen(c.lastSeen):(preview?esc(preview.slice(0,40)):'офлайн');
     return `<div class="chat-item fadein" onclick="openDm('${c.id}')">
       <div class="chat-av" style="background:${c.color};position:relative">${ini(c.name)}${c.online?'<div class="online-dot"></div>':''}</div>
       <div class="chat-info">
@@ -782,8 +829,9 @@ function updateChatStatus(){
   if(currentChat.type==='dm'){
     const c=contacts[currentChat.id];
     const s=document.getElementById('chatPeerStatus');
-    s.textContent=c?.online?'онлайн':'офлайн';
-    s.className='chat-peer-status'+(c?.online?' online':'');
+    if(c?.online){ s.textContent='онлайн'; s.className='chat-peer-status online'; }
+    else if(c?.lastSeen){ s.textContent='був(ла) '+fmtLastSeen(c.lastSeen); s.className='chat-peer-status'; }
+    else { s.textContent='офлайн'; s.className='chat-peer-status'; }
   }
 }
 
@@ -800,72 +848,118 @@ function appendMsg(msg, doScroll=true){
   const isMe=msg.from.id===me?.id;
   const wrap=document.createElement('div');
   wrap.className='msg-wrap fadein'+(isMe?' mine':'');
+  wrap.dataset.msgId=msg.id;
 
   let content='';
+  if(msg.msgType==='deleted'){
+    content=`<div class="bubble ${isMe?'mine':'theirs'} deleted">🗑 Повідомлення видалено</div>`;
+    wrap.innerHTML=`${!isMe?`<div class="msg-small-av" style="background:${msg.from.color}">${ini(msg.from.name)}</div>`:''}${content}`;
+    el.appendChild(wrap); if(doScroll) scrollBottom(); return;
+  }
+
+  let bodyContent='';
   if(msg.msgType==='sticker'){
-    content=`<img class="bubble-sticker" src="${msg.imageData}" onclick="openLb('${msg.imageData}')" alt="стікер">`;
+    bodyContent=`<img class="bubble-sticker" src="${msg.imageData}" onclick="openLb('${msg.imageData}')" alt="стікер">`;
   } else if(msg.msgType==='audio'){
     const name=msg.fileName||'аудіо';
-    content=`<div style="margin-top:4px;max-width:260px">
-      <div style="font-size:11px;color:var(--muted);margin-bottom:4px;font-family:'Share Tech Mono',monospace">🎵 ${esc(name)}</div>
-      <audio controls style="width:100%;outline:none;border-radius:8px" src="${msg.imageData}"></audio>
-    </div>`;
+    bodyContent=`<div style="margin-top:4px;max-width:260px"><div style="font-size:11px;color:var(--muted);margin-bottom:4px;font-family:'Share Tech Mono',monospace">🎵 ${esc(name)}</div><audio controls style="width:100%;outline:none;border-radius:8px" src="${msg.imageData}"></audio></div>`;
   } else if(msg.msgType==='video'){
-    content=`<video controls style="max-width:min(260px,65vw);border-radius:10px;display:block;margin-top:4px" src="${msg.imageData}"></video>`;
+    bodyContent=`<video controls style="max-width:min(260px,65vw);border-radius:10px;display:block;margin-top:4px" src="${msg.imageData}"></video>`;
   } else if(msg.msgType==='file'){
     const name=msg.fileName||'файл';
     const ext=(name.split('.').pop()||'').toLowerCase();
-    const icon=ext==='pdf'?'📕':ext==='doc'||ext==='docx'?'📝':ext==='txt'?'📄':ext==='zip'||ext==='rar'?'🗜️':ext==='xls'||ext==='xlsx'?'📊':ext==='ppt'||ext==='pptx'?'📊':'📎';
-    content=`<a href="${msg.imageData}" download="${esc(name)}" style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--card);border:1px solid var(--border);border-radius:12px;text-decoration:none;color:var(--text);margin-top:4px;max-width:260px">
-      <span style="font-size:28px;flex-shrink:0">${icon}</span>
-      <span style="font-size:13px;font-weight:600;word-break:break-word;flex:1">${esc(name)}</span>
-    </a>`;
+    const icon=ext==='pdf'?'📕':ext==='doc'||ext==='docx'?'📝':ext==='txt'?'📄':ext==='zip'||ext==='rar'?'🗜️':'📎';
+    bodyContent=`<a href="${msg.imageData}" download="${esc(name)}" style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--card);border:1px solid var(--border);border-radius:12px;text-decoration:none;color:var(--text);margin-top:4px;max-width:260px"><span style="font-size:28px;flex-shrink:0">${icon}</span><span style="font-size:13px;font-weight:600;word-break:break-word;flex:1">${esc(name)}</span></a>`;
   } else if(msg.msgType==='image'){
-    content=`<img class="bubble-img" src="${msg.imageData}" onclick="openLb('${msg.imageData}')" alt="фото">`;
+    bodyContent=`<img class="bubble-img" src="${msg.imageData}" onclick="openLb('${msg.imageData}')" alt="фото">`;
   } else {
-    content=`<div>${linkify(esc(msg.text))}</div>`;
+    bodyContent=`<div>${linkify(esc(msg.text||''))}</div>`;
   }
 
   const showName=!isMe&&currentChat?.type==='group';
+  const replyHtml=msg.replyTo?`<div class="bubble-reply${isMe?' mine':''}" onclick="scrollToMsg('${msg.replyTo}')">↩ ${esc((msg.replyPreview||'').slice(0,60))}</div>`:'';
+  const editedHtml=msg.edited?`<span class="edited-mark">ред.</span>`:'';
+  const reactionsHtml=renderReactions(msg.id, msg.reactions||{}, isMe);
 
+  // Actions bar
+  const actionsHtml=`<div class="msg-actions">
+    <button class="msg-action-btn" onclick="startReply('${msg.id}','${esc((msg.text||'фото').slice(0,60))}')" title="Відповісти">↩</button>
+    <button class="msg-action-btn" onclick="toggleReactPicker(event,'${msg.id}')" title="Реакція">😊</button>
+    ${isMe&&msg.msgType==='text'?`<button class="msg-action-btn" onclick="startEdit('${msg.id}','${esc(msg.text||'')}')" title="Редагувати">✏️</button>`:''}
+    ${isMe?`<button class="msg-action-btn del" onclick="deleteMsg('${msg.id}')" title="Видалити">🗑</button>`:''}
+  </div>`;
+
+  const bubbleClass=`bubble ${isMe?'mine':'theirs'}`;
   if(isMe){
     wrap.innerHTML=`
-      <div class="bubble mine">
-        ${content}
-        <div class="bubble-time">${fmtTime(msg.time)}</div>
+      ${actionsHtml}
+      <div class="${bubbleClass}" style="position:relative">
+        ${replyHtml}${bodyContent}
+        <div class="bubble-time">${fmtTime(msg.time)} ${editedHtml}</div>
+        ${reactionsHtml}
       </div>`;
   } else {
     wrap.innerHTML=`
       <div class="msg-small-av" style="background:${msg.from.color}">${ini(msg.from.name)}</div>
-      <div class="bubble theirs">
-        ${showName?`<div class="bubble-name" style="color:${msg.from.color}">${esc(msg.from.name)}</div>`:''}
-        ${content}
-        <div class="bubble-time">${fmtTime(msg.time)}</div>
+      <div style="position:relative">
+        ${actionsHtml}
+        <div class="${bubbleClass}">
+          ${showName?`<div class="bubble-name" style="color:${msg.from.color}">${esc(msg.from.name)}</div>`:''}
+          ${replyHtml}${bodyContent}
+          <div class="bubble-time">${fmtTime(msg.time)} ${editedHtml}</div>
+          ${reactionsHtml}
+        </div>
       </div>`;
   }
   el.appendChild(wrap);
   if(doScroll) scrollBottom();
 }
 
+function renderReactions(msgId, reactions, isMe){
+  const entries=Object.entries(reactions).filter(([,c])=>c>0);
+  if(!entries.length) return '';
+  return `<div class="reactions">${entries.map(([e,c])=>`<span class="reaction" onclick="sendReact('${msgId}','${e}')">${e} <span class="reaction-count">${c}</span></span>`).join('')}</div>`;
+}
+
+function scrollToMsg(msgId){
+  const el=document.querySelector(`[data-msg-id="${msgId}"]`);
+  if(el){el.scrollIntoView({behavior:'smooth',block:'center'});el.style.opacity='.4';setTimeout(()=>el.style.opacity='',600);}
+}
+
 function scrollBottom(){ const e=document.getElementById('messages'); e.scrollTop=e.scrollHeight; }
 
 // ── SEND ──────────────────────────────────────────────
+let replyingTo = null; // {id, preview}
+let editingMsgId = null;
+
 function sendMsg(){
   const inp=document.getElementById('msgInp');
   const text=inp.value.trim(); if(!text||!ws||ws.readyState!==1) return;
+
+  // Edit mode
+  if(editingMsgId){
+    ws.send(JSON.stringify({type:'edit_msg', msgId:editingMsgId, text}));
+    // Update locally
+    const el=document.querySelector(`[data-msg-id="${editingMsgId}"] .bubble`);
+    if(el){ const textEl=el.querySelector('div'); if(textEl) textEl.innerHTML=linkify(esc(text)); }
+    inp.value=''; inp.style.height='';
+    cancelEdit(); return;
+  }
+
+  const replyTo = replyingTo?.id||null;
+  const replyPreview = replyingTo?.preview||null;
+
   if(currentChat.type==='group'){
-    // Group: show locally (server does NOT echo back to sender)
-    ws.send(JSON.stringify({type:'group_msg',groupId:currentChat.id,text}));
-    const msg={id:'t'+Date.now(),from:{id:me.id,name:me.name,color:me.color},text,time:new Date().toISOString(),msgType:'text'};
+    ws.send(JSON.stringify({type:'group_msg',groupId:currentChat.id,text,replyTo,replyPreview}));
+    const msg={id:'t'+Date.now(),from:{id:me.id,name:me.name,color:me.color},text,time:new Date().toISOString(),msgType:'text',replyTo,replyPreview};
     appendMsg(msg);
     if(!groupHistories[currentChat.id]) groupHistories[currentChat.id]=[];
     groupHistories[currentChat.id].push(msg);
     if(groups[currentChat.id]) groups[currentChat.id].lastMsg=msg;
     renderHome();
   } else {
-    // DM: server does NOT echo back to sender, show locally
-    ws.send(JSON.stringify({type:'dm',toId:currentChat.id,text}));
-    const msg={id:'t'+Date.now(),from:{id:me.id,name:me.name,color:me.color},text,time:new Date().toISOString(),msgType:'text'};
+    ws.send(JSON.stringify({type:'dm',toId:currentChat.id,text,replyTo,replyPreview}));
+    const msg={id:'t'+Date.now(),from:{id:me.id,name:me.name,color:me.color},text,time:new Date().toISOString(),msgType:'text',replyTo,replyPreview};
     appendMsg(msg);
     if(!dmHistories[currentChat.id]) dmHistories[currentChat.id]=[];
     dmHistories[currentChat.id].push(msg);
@@ -873,6 +967,7 @@ function sendMsg(){
     renderHome();
   }
   inp.value=''; inp.style.height='';
+  cancelReply();
 }
 
 function handleKey(e){ if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMsg();} }
@@ -912,6 +1007,90 @@ function sendFile(inp){
   };
   r.readAsDataURL(file);
   inp.value='';
+}
+
+// ── REPLY ─────────────────────────────────────────────
+function startReply(msgId, preview){
+  replyingTo={id:msgId, preview};
+  document.getElementById('replyBarText').textContent='↩ '+preview;
+  document.getElementById('replyBar').style.display='flex';
+  document.getElementById('msgInp').focus();
+}
+function cancelReply(){
+  replyingTo=null; editingMsgId=null;
+  document.getElementById('replyBar').style.display='none';
+}
+
+// ── EDIT ──────────────────────────────────────────────
+function startEdit(msgId, text){
+  editingMsgId=msgId;
+  const inp=document.getElementById('msgInp');
+  inp.value=text; inp.focus();
+  document.getElementById('replyBarText').textContent='✏️ Редагування...';
+  document.getElementById('replyBar').style.display='flex';
+}
+
+// ── DELETE ────────────────────────────────────────────
+function deleteMsg(msgId){
+  if(!confirm('Видалити повідомлення?')) return;
+  ws.send(JSON.stringify({type:'delete_msg', msgId}));
+  updateMsgLocally(msgId, 'deleted');
+}
+
+function updateMsgLocally(msgId, action, data={}){
+  const wrap=document.querySelector(`[data-msg-id="${msgId}"]`);
+  if(!wrap) return;
+  const bubble=wrap.querySelector('.bubble');
+  if(!bubble) return;
+  if(action==='deleted'){
+    bubble.classList.add('deleted');
+    bubble.innerHTML='🗑 Повідомлення видалено';
+  } else if(action==='edited'){
+    const textDiv=bubble.querySelector('div:not(.bubble-name):not(.bubble-time):not(.reactions):not(.bubble-reply)');
+    if(textDiv) textDiv.innerHTML=linkify(esc(data.text));
+    let timeEl=bubble.querySelector('.bubble-time');
+    if(timeEl&&!timeEl.querySelector('.edited-mark')) timeEl.innerHTML+=` <span class="edited-mark">ред.</span>`;
+  } else if(action==='reacted'){
+    let reactDiv=bubble.querySelector('.reactions');
+    const html=renderReactions(msgId, data.reactions, wrap.classList.contains('mine'));
+    if(reactDiv) reactDiv.outerHTML=html||'<span></span>';
+    else if(html){ const timeEl=bubble.querySelector('.bubble-time'); if(timeEl) timeEl.insertAdjacentHTML('afterend',html); }
+  }
+}
+
+// ── REACT ─────────────────────────────────────────────
+const REACT_EMOJIS=['❤️','😂','👍','😮','😢','🔥','👎','🎉'];
+let reactPickerMsgId=null;
+
+function toggleReactPicker(e, msgId){
+  e.stopPropagation();
+  document.querySelectorAll('.react-picker').forEach(p=>p.remove());
+  if(reactPickerMsgId===msgId){ reactPickerMsgId=null; return; }
+  reactPickerMsgId=msgId;
+  const picker=document.createElement('div');
+  picker.className='react-picker';
+  picker.innerHTML=REACT_EMOJIS.map(em=>`<span class="react-opt" onclick="sendReact('${msgId}','${em}');this.closest('.react-picker').remove()">${em}</span>`).join('');
+  const wrap=document.querySelector(`[data-msg-id="${msgId}"]`);
+  if(wrap){ wrap.style.position='relative'; wrap.appendChild(picker); }
+  setTimeout(()=>document.addEventListener('click',()=>{picker.remove();reactPickerMsgId=null;},{once:true}),10);
+}
+
+function sendReact(msgId, emoji){
+  ws.send(JSON.stringify({type:'react', msgId, emoji}));
+}
+
+// ── LAST SEEN ─────────────────────────────────────────
+function fmtLastSeen(isoStr){
+  if(!isoStr) return 'офлайн';
+  try{
+    const d=new Date(isoStr), now=new Date();
+    const diff=Math.floor((now-d)/1000);
+    if(diff<60) return 'щойно';
+    if(diff<3600) return Math.floor(diff/60)+' хв тому';
+    if(diff<86400) return Math.floor(diff/3600)+' год тому';
+    if(diff<604800) return Math.floor(diff/86400)+' дн тому';
+    return d.toLocaleDateString('uk-UA',{day:'numeric',month:'short'});
+  }catch{return 'офлайн';}
 }
 
 // ── TYPING ────────────────────────────────────────────
