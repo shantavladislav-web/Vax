@@ -289,7 +289,7 @@ body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradie
   <div class="input-row">
     <div class="input-box">
       <button class="attach-btn" onclick="document.getElementById('fileInp').click()">📎</button>
-      <input type="file" id="fileInp" accept="image/*,video/*,application/pdf,.doc,.docx,.txt,.zip,.rar,.mp3,.mp4" onchange="sendFile(this)" style="display:none">
+      <input type="file" id="fileInp" accept="image/*,video/*,audio/*,application/pdf,.doc,.docx,.txt,.zip,.rar" onchange="sendFile(this)" style="display:none">
       <input type="file" id="stickerInp" accept="image/*" onchange="addCustomSticker(this)" style="display:none">
       <textarea class="msg-inp" id="msgInp" placeholder="Повідомлення..." rows="1"
         onkeydown="handleKey(event)" oninput="onType(this)"></textarea>
@@ -734,13 +734,21 @@ function appendMsg(msg, doScroll=true){
   let content='';
   if(msg.msgType==='sticker'){
     content=`<img class="bubble-sticker" src="${msg.imageData}" onclick="openLb('${msg.imageData}')" alt="стікер">`;
+  } else if(msg.msgType==='audio'){
+    const name=msg.fileName||'аудіо';
+    content=`<div style="margin-top:4px;max-width:260px">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:4px;font-family:'Share Tech Mono',monospace">🎵 ${esc(name)}</div>
+      <audio controls style="width:100%;outline:none;border-radius:8px" src="${msg.imageData}"></audio>
+    </div>`;
   } else if(msg.msgType==='video'){
     content=`<video controls style="max-width:min(260px,65vw);border-radius:10px;display:block;margin-top:4px" src="${msg.imageData}"></video>`;
   } else if(msg.msgType==='file'){
     const name=msg.fileName||'файл';
-    content=`<a href="${msg.imageData}" download="${esc(name)}" style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:rgba(255,255,255,.05);border-radius:8px;border:1px solid var(--border);text-decoration:none;color:var(--accent);font-size:13px;margin-top:4px">
-      <span style="font-size:20px">📄</span>
-      <span style="word-break:break-word">${esc(name)}</span>
+    const ext=(name.split('.').pop()||'').toLowerCase();
+    const icon=ext==='pdf'?'📕':ext==='doc'||ext==='docx'?'📝':ext==='txt'?'📄':ext==='zip'||ext==='rar'?'🗜️':ext==='xls'||ext==='xlsx'?'📊':ext==='ppt'||ext==='pptx'?'📊':'📎';
+    content=`<a href="${msg.imageData}" download="${esc(name)}" style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--card);border:1px solid var(--border);border-radius:12px;text-decoration:none;color:var(--text);margin-top:4px;max-width:260px">
+      <span style="font-size:28px;flex-shrink:0">${icon}</span>
+      <span style="font-size:13px;font-weight:600;word-break:break-word;flex:1">${esc(name)}</span>
     </a>`;
   } else if(msg.msgType==='image'){
     content=`<img class="bubble-img" src="${msg.imageData}" onclick="openLb('${msg.imageData}')" alt="фото">`;
@@ -812,9 +820,11 @@ function sendFile(inp){
   const file=inp.files[0]; if(!file) return;
   const isImage=file.type.startsWith('image/');
   const isVideo=file.type.startsWith('video/');
+  const isAudio=file.type.startsWith('audio/');
+  const isFile=!isImage&&!isVideo&&!isAudio;
   const maxSize=isVideo?30*1024*1024:10*1024*1024;
   if(file.size>maxSize){toast(`Файл занадто великий (макс ${isVideo?'30':'10'}МБ)`);inp.value='';return;}
-  const msgType=isImage?'image':isVideo?'video':'file';
+  const msgType=isImage?'image':isVideo?'video':isAudio?'audio':'file';
   const r=new FileReader();
   r.onload=e=>{
     const data=e.target.result;
