@@ -462,7 +462,9 @@ wss.on('connection', ws => {
       }
     }
 
-    else if (d.type === 'typing') {
+    else if (d.type === 'ping') {
+      send(ws, { type:'pong' });
+    }
       if (d.groupId) broadcastGroup(d.groupId, { type:'typing', groupId:d.groupId, userId, name:user.name }, userId);
       else if (d.toId) sendTo(d.toId, { type:'dm_typing', fromId:userId, name:user.name });
     }
