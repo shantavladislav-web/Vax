@@ -657,6 +657,10 @@ function handle(msg){
       if(currentChat?.type==='group'&&currentChat?.id===msg.groupId&&msg.userId!==me?.id) showTyping(msg.name);
       break;
 
+    case 'error':
+      toast('❌ ' + msg.text);
+      break;
+
     case 'dm_typing':
       if(currentChat?.type==='dm'&&currentChat?.id===msg.fromId) showTyping(msg.name);
       break;
