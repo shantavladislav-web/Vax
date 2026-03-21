@@ -1636,6 +1636,7 @@ function votePoll(pollId, optIdx){
 }
 
 // ── ATTACH MENU ───────────────────────────────────────
+function toggleAttachMenu(e){
   if(e) e.stopPropagation();
   const m=document.getElementById('attachMenu');
   const isOpen=m.style.display==='flex';
