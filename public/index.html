@@ -1714,9 +1714,14 @@ function playVoice(btn, src, durationEl){
     btn.textContent='▶';
     return;
   }
-  // Зупинити всі інші
+  // Зупинити всі інші і знищити їх audio об'єкти
   document.querySelectorAll('.voice-play').forEach(b=>{
-    if(b!==btn && b._audio){ b._audio.pause(); b._audio.currentTime=0; }
+    if(b!==btn && b._audio){
+      b._audio.pause();
+      b._audio.src='';
+      b._audio.load();
+      b._audio = null;
+    }
     if(b!==btn) b.textContent='▶';
   });
   // Завжди створювати новий Audio (фікс Android кешу)
@@ -1742,8 +1747,6 @@ function playVoice(btn, src, durationEl){
   audio.onended = ()=>{
     btn.textContent='▶';
     if(durationEl && btn._origDur) durationEl.textContent=btn._origDur;
-    // Зупинити всі інші аудіо щоб браузер не переходив автоматично
-    document.querySelectorAll('audio').forEach(a=>{ a.pause(); a.currentTime=0; });
   };
   // Зберегти оригінальну тривалість
   if(durationEl) btn._origDur = durationEl.textContent;
