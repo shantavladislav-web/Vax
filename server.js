@@ -5,9 +5,41 @@ const { v4: uuidv4 } = require('uuid');
 const path = require('path');
 const { Pool } = require('pg');
 const crypto = require('crypto');
+const { S3Client, PutObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
 
 function hashPassword(pass) {
   return crypto.createHash('sha256').update(pass + 'vax_salt_2024').digest('hex');
+}
+
+// ── S3 / BUCKET ────────────────────────────────────────
+const s3 = process.env.AWS_ENDPOINT_URL ? new S3Client({
+  endpoint: process.env.AWS_ENDPOINT_URL,
+  region: process.env.AWS_DEFAULT_REGION || 'auto',
+  credentials: {
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+  },
+  forcePathStyle: true,
+}) : null;
+
+const S3_BUCKET = process.env.AWS_S3_BUCKET_NAME;
+
+async function uploadToS3(base64data, fileName, mimeType) {
+  if (!s3 || !S3_BUCKET) return null;
+  try {
+    const buffer = Buffer.from(base64data.split(',')[1] || base64data, 'base64');
+    const key = `vax/${uuidv4().slice(0,8)}_${fileName.replace(/[^a-zA-Z0-9._-]/g,'_')}`;
+    await s3.send(new PutObjectCommand({
+      Bucket: S3_BUCKET,
+      Key: key,
+      Body: buffer,
+      ContentType: mimeType || 'application/octet-stream',
+    }));
+    return `${process.env.AWS_ENDPOINT_URL}/${S3_BUCKET}/${key}`;
+  } catch(e) {
+    console.error('S3 upload error:', e.message);
+    return null;
+  }
 }
 
 const app = express();
@@ -322,14 +354,17 @@ wss.on('connection', ws => {
         const perm2 = await q1(`SELECT can_write FROM group_permissions WHERE group_id=$1 AND user_id=$2`,[gid,userId]);
         if(!perm2 || !perm2.can_write){ send(ws,{type:'error',text:'У вас немає дозволу писати в цій групі'}); return; }
       }
-      const img = String(d.imageData||''); if (!img||img.length>7000000) return;
-      const fileType = String(d.fileType||'');
-      const fileName = String(d.fileName||'');
+      const img = String(d.imageData||''); if (!img||img.length>50000000) return;
+      const fileType = String(d.fileType||'image/jpeg');
+      const fileName = String(d.fileName||'file');
       const msgType = fileType.startsWith('image/')?'image':fileType.startsWith('video/')?'video':fileType.startsWith('audio/')?'audio':'file';
       const id = uuidv4().slice(0,8), time = new Date().toISOString();
+      // Try upload to S3, fallback to base64
+      const s3url = await uploadToS3(img, fileName, fileType);
+      const storedData = s3url || img;
       await pool.query(`INSERT INTO group_messages (id,group_id,from_id,from_name,from_color,image_data,msg_type,file_name,file_type,time) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
-        [id,gid,userId,user.name,user.color,img,msgType,fileName,fileType,time]);
-      const msg = { id, from:{id:userId,name:user.name,color:user.color}, imageData:img, fileName, fileType, msgType, time };
+        [id,gid,userId,user.name,user.color,storedData,msgType,fileName,fileType,time]);
+      const msg = { id, from:{id:userId,name:user.name,color:user.color}, imageData:storedData, fileName, fileType, msgType, time };
       broadcastGroup(gid, { type:'group_msg', groupId:gid, msg }, userId);
     }
 
@@ -433,15 +468,19 @@ wss.on('connection', ws => {
 
     else if (d.type === 'dm_img') {
       const toId = String(d.toId||''); if (!toId||toId===userId) return;
-      const img = String(d.imageData||''); if (!img||img.length>7000000) return;
-      const fileType = String(d.fileType||'');
-      const fileName = String(d.fileName||'');
+      const img = String(d.imageData||''); if (!img||img.length>50000000) return;
+      const fileType = String(d.fileType||'image/jpeg');
+      const fileName = String(d.fileName||'file');
       const msgType = fileType.startsWith('image/')?'image':fileType.startsWith('video/')?'video':fileType.startsWith('audio/')?'audio':'file';
       const id = uuidv4().slice(0,8), time = new Date().toISOString();
-      await pool.query(`INSERT INTO dm_messages (id,from_id,to_id,from_name,from_color,image_data,msg_type,file_name,file_type,time) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
-        [id,userId,toId,user.name,user.color,img,msgType,fileName,fileType,time]);
-      const msg = { id, from:{id:userId,name:user.name,color:user.color}, imageData:img, fileName, fileType, msgType, time };
+      const s3url = await uploadToS3(img, fileName, fileType);
+      const storedData = s3url || img;
+      const isDelivered = isOnline(toId);
+      await pool.query(`INSERT INTO dm_messages (id,from_id,to_id,from_name,from_color,image_data,msg_type,file_name,file_type,delivered,time) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+        [id,userId,toId,user.name,user.color,storedData,msgType,fileName,fileType,isDelivered,time]);
+      const msg = { id, from:{id:userId,name:user.name,color:user.color}, imageData:storedData, fileName, fileType, msgType, delivered:isDelivered, time };
       sendTo(toId, { type:'dm_msg', dmWith:userId, msg, fromName:user.name, fromColor:user.color });
+      send(ws, { type:'msg_status', msgId:id, delivered:isDelivered, read:false });
     }
 
     else if (d.type === 'get_group') {
