@@ -320,6 +320,8 @@ wss.on('connection', ws => {
         send(ws, { type:'profile_updated', user:{id:userId, name:updated.name, color:updated.color, username:updated.username} });
       }
     }
+
+    else if (d.type === 'typing') {
       if (d.groupId) broadcastGroup(d.groupId, { type:'typing', groupId:d.groupId, userId, name:user.name }, userId);
       else if (d.toId) sendTo(d.toId, { type:'dm_typing', fromId:userId, name:user.name });
     }
