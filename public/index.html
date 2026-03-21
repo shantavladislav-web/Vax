@@ -160,6 +160,10 @@ body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradie
 @keyframes fadeUp{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
 .fadein{animation:fadeUp .2s ease}
 
+/* ATTACH MENU */
+.attach-menu-btn{background:none;border:none;color:var(--text);font-size:14px;padding:10px 14px;cursor:pointer;border-radius:8px;text-align:left;width:100%;transition:background .1s;font-family:'Exo 2',sans-serif}
+.attach-menu-btn:active{background:var(--hover)}
+
 /* ── EMOJI / STICKER PANEL ── */
 .emoji-panel{position:fixed;bottom:70px;left:0;right:0;background:var(--panel);border-top:1px solid var(--border);z-index:50;display:none;flex-direction:column;max-height:320px}
 .emoji-panel.open{display:flex}
@@ -875,6 +879,20 @@ function saveNewName(){
   closeSheet('profile');
   toast('Нікнейм збережено. Оновіть сторінку.');
 }
+
+// ── ATTACH MENU ───────────────────────────────────────
+function toggleAttachMenu(){
+  const m=document.getElementById('attachMenu');
+  const isOpen=m.style.display==='flex';
+  m.style.display=isOpen?'none':'flex';
+  if(!isOpen) closeEmojiPanel();
+}
+function closeAttachMenu(){ document.getElementById('attachMenu').style.display='none'; }
+
+// Aliases that call sendFile
+function sendImg(inp){ sendFile(inp); }
+function sendVideo(inp){ sendFile(inp); }
+function sendDoc(inp){ sendFile(inp); }
 
 // ── NEW CHAT ──────────────────────────────────────────
 function openNewChat(){ openSheet('newChat'); }
