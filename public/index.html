@@ -1739,7 +1739,12 @@ function playVoice(btn, src, durationEl){
     const left = Math.max(0, Math.round((audio.duration||0) - audio.currentTime));
     if(durationEl) durationEl.textContent = `0:${String(left).padStart(2,'0')}`;
   };
-  audio.onended = ()=>{ btn.textContent='▶'; if(durationEl && btn._origDur) durationEl.textContent=btn._origDur; };
+  audio.onended = ()=>{
+    btn.textContent='▶';
+    if(durationEl && btn._origDur) durationEl.textContent=btn._origDur;
+    // Зупинити всі інші аудіо щоб браузер не переходив автоматично
+    document.querySelectorAll('audio').forEach(a=>{ a.pause(); a.currentTime=0; });
+  };
   // Зберегти оригінальну тривалість
   if(durationEl) btn._origDur = durationEl.textContent;
   audio.src = src; // встановити після обробників
