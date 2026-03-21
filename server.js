@@ -190,6 +190,18 @@ async function allContacts(exUid) {
   return rows.map(u => ({ id: u.id, name: u.name, color: u.color, online: isOnline(u.id), lastSeen: u.last_seen||null, username: u.username||'' }));
 }
 
+// ── HEARTBEAT ─────────────────────────────────────────
+// Keep connections alive — Railway drops idle WS after ~60s
+setInterval(() => {
+  for (const [uid, s] of sessions) {
+    if (s.ws?.readyState === 1) {
+      s.ws.ping();
+    } else if (s.ws?.readyState === 3) {
+      s.ws = null;
+    }
+  }
+}, 20000);
+
 // ── WEBSOCKET ──────────────────────────────────────────
 wss.on('connection', ws => {
   ws.on('message', async raw => {
