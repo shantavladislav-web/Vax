@@ -210,12 +210,36 @@ body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradie
   <div class="login-box">
     <div class="login-logo">VA<span>X</span></div>
     <div class="login-sub">// SECURE MESSENGER</div>
-    <div><div class="lbl">Твій нікнейм</div>
-    <input class="inp" id="nameInp" placeholder="Введи нікнейм..." maxlength="24" autocomplete="off"></div>
-    <div id="passWrap"><div class="lbl">Пароль</div>
-    <input class="inp" id="passInp" type="password" placeholder="Введи пароль..." maxlength="64" autocomplete="off"></div>
-    <button class="btn-primary" onclick="doLogin()">УВІЙТИ →</button>
-    <div style="font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--dim);text-align:center">Дані зберігаються на цьому пристрої</div>
+
+    <!-- TABS -->
+    <div style="display:flex;border:1px solid var(--border);border-radius:10px;overflow:hidden">
+      <button id="tabLogin" onclick="switchAuthTab('login')" style="flex:1;padding:10px;background:var(--accent2);border:none;color:#fff;font-family:'Rajdhani',sans-serif;font-size:15px;font-weight:700;cursor:pointer;letter-spacing:1px">ВХІД</button>
+      <button id="tabReg" onclick="switchAuthTab('register')" style="flex:1;padding:10px;background:var(--card);border:none;color:var(--muted);font-family:'Rajdhani',sans-serif;font-size:15px;font-weight:700;cursor:pointer;letter-spacing:1px">РЕЄСТРАЦІЯ</button>
+    </div>
+
+    <!-- LOGIN FORM -->
+    <div id="loginForm">
+      <div><div class="lbl">Логін</div>
+      <input class="inp" id="loginUsername" placeholder="Твій логін..." maxlength="24" autocomplete="username"></div>
+      <div><div class="lbl">Пароль</div>
+      <input class="inp" id="loginPassword" type="password" placeholder="Пароль..." maxlength="64" autocomplete="current-password"></div>
+      <div id="loginError" style="font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--accent3);text-align:center;min-height:16px"></div>
+      <button class="btn-primary" onclick="doLogin()">УВІЙТИ →</button>
+    </div>
+
+    <!-- REGISTER FORM -->
+    <div id="registerForm" style="display:none">
+      <div><div class="lbl">Логін (для входу)</div>
+      <input class="inp" id="regUsername" placeholder="Мін. 3 символи..." maxlength="24" autocomplete="username"></div>
+      <div><div class="lbl">Ім'я (відображається)</div>
+      <input class="inp" id="regName" placeholder="Як тебе кличуть?" maxlength="24"></div>
+      <div><div class="lbl">Пароль</div>
+      <input class="inp" id="regPassword" type="password" placeholder="Мін. 4 символи..." maxlength="64" autocomplete="new-password"></div>
+      <div><div class="lbl">Повторіть пароль</div>
+      <input class="inp" id="regPassword2" type="password" placeholder="Повторіть пароль..." maxlength="64"></div>
+      <div id="regError" style="font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--accent3);text-align:center;min-height:16px"></div>
+      <button class="btn-primary" onclick="doRegister()">ЗАРЕЄСТРУВАТИСЬ →</button>
+    </div>
   </div>
 </div>
 
@@ -223,13 +247,16 @@ body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradie
 <div class="overlay" id="setPassSheet">
   <div class="sheet">
     <div class="sheet-title" style="color:var(--accent3)">🔐 ВСТАНОВІТЬ ПАРОЛЬ</div>
-    <div style="font-size:13px;color:var(--muted);line-height:1.5">Для безпеки вашого акаунту встановіть пароль. Він буде потрібен при вході з нового пристрою.</div>
-    <div><div class="lbl" style="margin-bottom:6px">Новий пароль</div>
+    <div style="font-size:13px;color:var(--muted);line-height:1.5">Для безпеки вашого акаунту встановіть логін і пароль. Тоді зможете заходити з будь-якого пристрою.</div>
+    <div><div class="lbl" style="margin-bottom:6px">Логін</div>
+    <input class="sheet-inp" id="setPassUsername" placeholder="Придумайте логін..." maxlength="24"></div>
+    <div><div class="lbl" style="margin-bottom:6px">Пароль</div>
     <input class="sheet-inp" id="newPassInp" type="password" placeholder="Мінімум 4 символи..." maxlength="64"></div>
     <div><div class="lbl" style="margin-bottom:6px">Повторіть пароль</div>
     <input class="sheet-inp" id="newPassInp2" type="password" placeholder="Повторіть пароль..." maxlength="64"></div>
+    <div id="setPassError" style="font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--accent3);min-height:16px"></div>
     <div class="sheet-btns">
-      <button class="sheet-btn cancel" onclick="skipSetPass()">Пропустити</button>
+      <button class="sheet-btn cancel" onclick="skipSetPass()">Пізніше</button>
       <button class="sheet-btn ok" onclick="confirmSetPass()">Встановити</button>
     </div>
   </div>
@@ -365,8 +392,10 @@ body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradie
 <div class="overlay" id="settingsSheet" onclick="if(event.target===this)closeSheet('settings')">
   <div class="sheet">
     <div class="sheet-title">⚙️ НАЛАШТУВАННЯ</div>
-    <div><div class="lbl" style="margin-bottom:6px">Новий нікнейм</div>
-    <input class="sheet-inp" id="newNameInp" placeholder="Введи новий нікнейм..." maxlength="24"></div>
+    <div><div class="lbl" style="margin-bottom:6px">Новий логін</div>
+    <input class="sheet-inp" id="settingsUsername" placeholder="Новий логін..." maxlength="24"></div>
+    <div><div class="lbl" style="margin-bottom:6px">Нове ім'я</div>
+    <input class="sheet-inp" id="newNameInp" placeholder="Нове ім'я..." maxlength="24"></div>
     <div><div class="lbl" style="margin-bottom:6px">Новий пароль</div>
     <input class="sheet-inp" id="changePassInp" type="password" placeholder="Мін. 4 символи..." maxlength="64"></div>
     <div><div class="lbl" style="margin-bottom:6px">Підтвердити пароль</div>
@@ -375,6 +404,7 @@ body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradie
       <button class="sheet-btn cancel" onclick="closeSheet('settings')">Скасувати</button>
       <button class="sheet-btn ok" onclick="saveSettings()">Зберегти</button>
     </div>
+    <button class="sheet-btn danger" style="margin-top:4px" onclick="logout()">🚪 Вийти з акаунту</button>
   </div>
 </div>
 
@@ -418,89 +448,123 @@ async function hashPass(pass){
 
 // ── BOOT ──────────────────────────────────────────────
 window.addEventListener('DOMContentLoaded',()=>{
-  const name=lsGet(LS_NAME,'');
-  const passHash=lsGet('vax_pass','');
-  if(name && passHash){
-    // Has both name and password — auto login
-    document.getElementById('nameInp').value=name;
-    document.getElementById('passInp').value='••••••••'; // fake placeholder
-    setTimeout(doLogin,200);
-  } else if(name && !passHash){
-    // Old user without password — show name, focus password
-    document.getElementById('nameInp').value=name;
-    document.getElementById('passInp').focus();
+  // Auto-login if saved credentials
+  const savedUser = lsGet('vax_auth', null);
+  if(savedUser?.username && savedUser?.password){
+    document.getElementById('loginUsername').value = savedUser.username;
+    document.getElementById('loginPassword').value = '••••••••';
+    setTimeout(doLogin, 200);
   }
   if('Notification' in window && Notification.permission==='default') Notification.requestPermission();
   if('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js');
 });
 
-document.getElementById('nameInp').addEventListener('keydown',e=>{if(e.key==='Enter')document.getElementById('passInp').focus();});
-document.getElementById('passInp').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();});
+function switchAuthTab(tab){
+  document.getElementById('loginForm').style.display = tab==='login'?'block':'none';
+  document.getElementById('registerForm').style.display = tab==='register'?'block':'none';
+  document.getElementById('tabLogin').style.background = tab==='login'?'var(--accent2)':'var(--card)';
+  document.getElementById('tabLogin').style.color = tab==='login'?'#fff':'var(--muted)';
+  document.getElementById('tabReg').style.background = tab==='register'?'var(--accent2)':'var(--card)';
+  document.getElementById('tabReg').style.color = tab==='register'?'#fff':'var(--muted)';
+  document.getElementById('loginError').textContent='';
+  document.getElementById('regError').textContent='';
+}
 
-async function doLogin(){
-  const name=document.getElementById('nameInp').value.trim();
-  if(!name){document.getElementById('nameInp').classList.add('inp-err');setTimeout(()=>document.getElementById('nameInp').classList.remove('inp-err'),800);return;}
-
-  const passVal=document.getElementById('passInp').value;
-  const storedHash=lsGet('vax_pass','');
-
-  // If user has stored password
-  if(storedHash){
-    // Check if it's auto-login (fake placeholder)
-    if(passVal==='••••••••'){
-      // auto login — use stored hash
-      lsSet(LS_NAME,name);
-      showScreen('homeScreen');
-      connect(name);
-      return;
-    }
-    if(!passVal){document.getElementById('passInp').classList.add('inp-err');setTimeout(()=>document.getElementById('passInp').classList.remove('inp-err'),800);return;}
-    const hash=await hashPass(passVal);
-    if(hash!==storedHash){
-      document.getElementById('passInp').classList.add('inp-err');
-      document.getElementById('passInp').value='';
-      document.getElementById('passInp').placeholder='Невірний пароль!';
-      setTimeout(()=>{document.getElementById('passInp').classList.remove('inp-err');document.getElementById('passInp').placeholder='Введи пароль...';},1500);
-      return;
-    }
-  } else if(passVal && passVal!=='••••••••'){
-    // New password being set on login
-    const hash=await hashPass(passVal);
-    lsSet('vax_pass',hash);
+document.addEventListener('keydown', e=>{
+  if(e.key==='Enter'){
+    if(document.getElementById('loginForm').style.display!=='none') doLogin();
+    else doRegister();
   }
+});
 
-  lsSet(LS_NAME,name);
-  showScreen('homeScreen');
-  connect(name);
+function doLogin(){
+  const username = document.getElementById('loginUsername').value.trim().toLowerCase();
+  const passVal  = document.getElementById('loginPassword').value;
+  if(!username){ setAuthErr('login','Введіть логін'); return; }
+  if(!passVal){ setAuthErr('login','Введіть пароль'); return; }
+
+  // Check if auto-login with saved creds
+  const saved = lsGet('vax_auth', null);
+  if(passVal==='••••••••' && saved?.username===username){
+    connectWs('login', username, saved.password);
+    return;
+  }
+  lsSet('vax_auth', {username, password: passVal});
+  connectWs('login', username, passVal);
+}
+
+function doRegister(){
+  const username = document.getElementById('regUsername').value.trim().toLowerCase();
+  const name     = document.getElementById('regName').value.trim();
+  const pass1    = document.getElementById('regPassword').value;
+  const pass2    = document.getElementById('regPassword2').value;
+  if(!username||username.length<3){ setAuthErr('reg','Логін мінімум 3 символи'); return; }
+  if(!name){ setAuthErr('reg','Введіть ім\'я'); return; }
+  if(!pass1||pass1.length<4){ setAuthErr('reg','Пароль мінімум 4 символи'); return; }
+  if(pass1!==pass2){ setAuthErr('reg','Паролі не співпадають'); return; }
+  lsSet('vax_auth', {username, password: pass1});
+  connectWs('register', username, pass1, name);
+}
+
+function setAuthErr(form, msg){
+  document.getElementById(form==='login'?'loginError':'regError').textContent = msg;
+}
+
+function setAuthErr2(msg){
+  const loginErr = document.getElementById('loginError');
+  const regErr = document.getElementById('regError');
+  if(loginErr && document.getElementById('loginForm').style.display!=='none') loginErr.textContent=msg;
+  else if(regErr) regErr.textContent=msg;
 }
 
 // ── WEBSOCKET ─────────────────────────────────────────
-function connect(name){
+function connectWs(authType, username, password, name=''){
   const proto=location.protocol==='https:'?'wss':'ws';
   ws=new WebSocket(`${proto}://${location.host}`);
   ws.onopen=()=>{
-    const uid=lsGet(LS_UID,null);
-    ws.send(JSON.stringify({type:'register',name,userId:uid}));
+    if(authType==='login'){
+      ws.send(JSON.stringify({type:'login', username, password}));
+    } else {
+      ws.send(JSON.stringify({type:'register', username, password, name}));
+    }
   };
   ws.onmessage=({data})=>handle(JSON.parse(data));
-  ws.onclose=()=>{ setBadge('ОФЛАЙН','var(--accent3)'); setTimeout(()=>connect(lsGet(LS_NAME,'')),3000); };
+  ws.onclose=()=>{
+    setBadge('ОФЛАЙН','var(--accent3)');
+    // Reconnect if logged in
+    if(me){
+      const saved=lsGet('vax_auth',null);
+      if(saved) setTimeout(()=>connectWs('login',saved.username,saved.password),3000);
+    }
+  };
 }
 
 function handle(msg){
   switch(msg.type){
 
+    case 'auth_error':
+      setAuthErr2(msg.msg);
+      lsSet('vax_auth', null);
+      break;
+
+    case 'profile_updated':
+      me={...me,...msg.user};
+      document.getElementById('myAv').textContent=ini(me.name);
+      toast('✅ Профіль оновлено!');
+      break;
+
     case 'init':
       me=msg.user;
-      lsSet(LS_UID, me.id);
       setBadge('●','var(--green)');
       const av=document.getElementById('myAv');
       av.style.background=me.color; av.textContent=ini(me.name);
       msg.groups.forEach(g=>{ groups[g.id]=g; });
       msg.contacts.forEach(c=>{ contacts[c.id]=c; });
+      showScreen('homeScreen');
       renderHome();
       requestPush();
-      // Show set password modal for old users who don't have password yet
-      if(!lsGet('vax_pass','') && !lsGet('vax_pass_skipped',false)){
+      // Show set password modal for users without username
+      if(!me.username && !lsGet('vax_pass_skipped',false)){
         setTimeout(()=>document.getElementById('setPassSheet').classList.add('open'), 1000);
       }
       break;
@@ -971,27 +1035,21 @@ async function saveSettings(){
   const name=document.getElementById('newNameInp').value.trim();
   const p1=document.getElementById('changePassInp').value;
   const p2=document.getElementById('changePassInp2').value;
-  let changed=false;
+  const newUsername=document.getElementById('settingsUsername')?.value.trim().toLowerCase()||'';
 
-  if(name){
-    lsSet(LS_NAME,name);
-    changed=true;
+  if(!name&&!p1&&!newUsername){toast('Нічого не змінено');return;}
+  if(p1&&p1.length<4){toast('Пароль мінімум 4 символи');return;}
+  if(p1&&p1!==p2){
+    document.getElementById('changePassInp2').classList.add('inp-err');
+    setTimeout(()=>document.getElementById('changePassInp2').classList.remove('inp-err'),800);
+    toast('Паролі не співпадають');return;
   }
-  if(p1||p2){
-    if(p1.length<4){toast('Пароль мінімум 4 символи');return;}
-    if(p1!==p2){
-      document.getElementById('changePassInp2').classList.add('inp-err');
-      setTimeout(()=>document.getElementById('changePassInp2').classList.remove('inp-err'),800);
-      toast('Паролі не співпадають');return;
-    }
-    const hash=await hashPass(p1);
-    lsSet('vax_pass',hash);
-    changed=true;
-  }
-
-  if(!changed){toast('Нічого не змінено');return;}
+  const payload={type:'change_profile'};
+  if(name) payload.name=name;
+  if(p1) { payload.password=p1; const saved=lsGet('vax_auth',null); if(saved) lsSet('vax_auth',{...saved,password:p1}); }
+  if(newUsername) payload.username=newUsername;
+  ws.send(JSON.stringify(payload));
   closeSheet('settings');
-  toast('✅ Збережено! Оновіть сторінку щоб застосувати.');
 }
 
 // ── ATTACH MENU ───────────────────────────────────────
@@ -1016,19 +1074,34 @@ function sendDoc(inp){ sendFile(inp); }
 
 // ── PASSWORD SETUP ────────────────────────────────────
 async function confirmSetPass(){
-  const p1=document.getElementById('newPassInp').value;
-  const p2=document.getElementById('newPassInp2').value;
-  if(!p1||p1.length<4){toast('Пароль мінімум 4 символи');return;}
-  if(p1!==p2){toast('Паролі не співпадають');document.getElementById('newPassInp2').classList.add('inp-err');setTimeout(()=>document.getElementById('newPassInp2').classList.remove('inp-err'),800);return;}
-  const hash=await hashPass(p1);
-  lsSet('vax_pass',hash);
+  const username = document.getElementById('setPassUsername').value.trim().toLowerCase();
+  const p1 = document.getElementById('newPassInp').value;
+  const p2 = document.getElementById('newPassInp2').value;
+  const errEl = document.getElementById('setPassError');
+  if(!username||username.length<3){errEl.textContent='Логін мінімум 3 символи';return;}
+  if(!p1||p1.length<4){errEl.textContent='Пароль мінімум 4 символи';return;}
+  if(p1!==p2){errEl.textContent='Паролі не співпадають';return;}
+  ws.send(JSON.stringify({type:'change_profile', username, password:p1}));
+  lsSet('vax_auth',{username, password:p1});
   document.getElementById('setPassSheet').classList.remove('open');
-  toast('✅ Пароль встановлено!');
+  toast('✅ Логін і пароль встановлено!');
 }
 
 function skipSetPass(){
   lsSet('vax_pass_skipped',true);
   document.getElementById('setPassSheet').classList.remove('open');
+}
+
+function logout(){
+  if(!confirm('Вийти з акаунту?')) return;
+  lsSet('vax_auth', null);
+  if(ws) ws.close();
+  ws=null; me=null; groups={}; contacts={}; dmHistories={}; groupHistories={};
+  closeSheet('settings');
+  showScreen('loginScreen');
+  document.getElementById('loginUsername').value='';
+  document.getElementById('loginPassword').value='';
+  setBadge('●','var(--dim)');
 }
 
 // ── NEW CHAT ──────────────────────────────────────────
