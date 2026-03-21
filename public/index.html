@@ -872,12 +872,17 @@ function handle(msg){
     case 'call_offer':
       callWith = msg.fromId;
       const caller = contacts[msg.fromId]||{name:'?',color:'#888'};
+      // Show in-app UI
       document.getElementById('incomingName').textContent = caller.name;
       document.getElementById('incomingCall').style.display='block';
       playRingtone();
-      // Store offer for when accepted
       window._pendingOffer = msg.offer;
-      // Set remote desc
+      // Send SW notification so it shows even when app is in background
+      if('serviceWorker' in navigator){
+        navigator.serviceWorker.ready.then(reg=>{
+          reg.active?.postMessage({type:'CALL_NOTIFY', callerName:caller.name, callerId:msg.fromId});
+        });
+      }
       (async()=>{
         if(!pc) await initCall(false, callWith);
         try{ await pc.setRemoteDescription(new RTCSessionDescription(msg.offer)); }catch(e){}
@@ -1974,6 +1979,14 @@ function playRingtone(){
   },1500);
 }
 function stopRingtone(){ if(_ringtoneInterval){clearInterval(_ringtoneInterval);_ringtoneInterval=null;} }
+
+// ── SERVICE WORKER MESSAGES ───────────────────────────
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.addEventListener('message', e=>{
+    if(e.data?.type==='CALL_ACCEPT') acceptCall();
+    if(e.data?.type==='CALL_REJECT') rejectCall();
+  });
+}
 
 // ── MOBILE RECONNECT ──────────────────────────────────
 document.addEventListener('visibilitychange', ()=>{
