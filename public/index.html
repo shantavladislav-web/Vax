@@ -145,6 +145,11 @@ body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradie
 .poll-option-pct{position:relative;z-index:1;font-size:11px;font-family:'Share Tech Mono',monospace;color:var(--muted)}
 .poll-total{font-size:11px;color:var(--dim);font-family:'Share Tech Mono',monospace;margin-top:6px}
 
+.msg-ticks{font-size:12px;margin-left:3px;line-height:1}
+.msg-ticks.sent{color:var(--muted)}
+.msg-ticks.delivered{color:var(--muted)}
+.msg-ticks.read{color:#00b0ff}
+
 /* LAST SEEN */
 .last-seen{font-size:10px;color:var(--muted);font-family:'Share Tech Mono',monospace}
 
@@ -910,6 +915,16 @@ function handle(msg){
       endCall();
       break;
 
+    case 'msg_status':
+      // Update tick marks on message
+      const tickEl=document.querySelector(`[data-tick="${msg.msgId}"]`);
+      if(tickEl){
+        if(msg.read){ tickEl.textContent='✓✓'; tickEl.className='msg-ticks read'; }
+        else if(msg.delivered){ tickEl.textContent='✓✓'; tickEl.className='msg-ticks delivered'; }
+        else { tickEl.textContent='✓'; tickEl.className='msg-ticks sent'; }
+      }
+      break;
+
     case 'msg_edited':
       // Fix edit - find text div properly
       (()=>{
@@ -1068,6 +1083,8 @@ function openDm(id){
   showScreen('chatScreen');
   // Always request fresh from server for sync across devices
   ws.send(JSON.stringify({type:'get_dm',toId:id}));
+  // Mark messages as read
+  ws.send(JSON.stringify({type:'mark_read', toId:id}));
 }
 
 function updateChatStatus(){
@@ -1137,13 +1154,15 @@ function appendMsg(msg, doScroll=true){
     ${isMe?`<button class="msg-action-btn del" onclick="deleteMsg('${msg.id}')" title="Видалити">🗑</button>`:''}
   </div>`;
 
+  const ticksHtml = isMe && currentChat?.type==='dm' ? `<span class="msg-ticks ${msg.read?'read':msg.delivered?'delivered':'sent'}" data-tick="${msg.id}">${msg.read?'✓✓':msg.delivered?'✓✓':'✓'}</span>` : '';
+
   const bubbleClass=`bubble ${isMe?'mine':'theirs'}`;
   if(isMe){
     wrap.innerHTML=`
       ${actionsHtml}
       <div class="${bubbleClass}" style="position:relative">
         ${replyHtml}${bodyContent}
-        <div class="bubble-time">${fmtTime(msg.time)} ${editedHtml}</div>
+        <div class="bubble-time">${fmtTime(msg.time)} ${editedHtml} ${ticksHtml}</div>
         ${reactionsHtml}
       </div>`;
   } else {
