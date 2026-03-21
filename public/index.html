@@ -2024,11 +2024,12 @@ async function initCall(isInitiator, toId){
     };
 
     pc.ontrack = e => {
-      const audio = document.getElementById('remoteAudio')||document.createElement('audio');
+      let audio = document.getElementById('remoteAudio');
+      if(!audio){ audio = document.createElement('audio'); document.body.appendChild(audio); }
       audio.id = 'remoteAudio';
       audio.srcObject = e.streams[0];
       audio.autoplay = true;
-      document.body.appendChild(audio);
+      audio.play().catch(()=>{});
       startCallTimer();
       document.getElementById('callStatus').textContent = 'ПІДКЛЮЧЕНО';
     };
@@ -2063,9 +2064,10 @@ async function acceptCall(){
         if(e.candidate) ws.send(JSON.stringify({type:'call_ice', toId:callWith, candidate:e.candidate}));
       };
       pc.ontrack = e => {
-        const audio = document.getElementById('remoteAudio')||document.createElement('audio');
+        let audio = document.getElementById('remoteAudio');
+        if(!audio){ audio = document.createElement('audio'); document.body.appendChild(audio); }
         audio.id='remoteAudio'; audio.srcObject=e.streams[0]; audio.autoplay=true;
-        document.body.appendChild(audio);
+        audio.play().catch(()=>{});
         startCallTimer();
         document.getElementById('callStatus').textContent='ПІДКЛЮЧЕНО';
       };
