@@ -594,7 +594,6 @@ function handle(msg){
       break;
 
     case 'init':
-      me=msg.user;
       const isFirstLogin = !me;
       me=msg.user;
       setBadge('●','var(--green)');
@@ -602,8 +601,7 @@ function handle(msg){
       av.style.background=me.color; av.textContent=ini(me.name);
       msg.groups.forEach(g=>{ groups[g.id]=g; });
       msg.contacts.forEach(c=>{ contacts[c.id]=c; });
-      // Only go home on first login, not on reconnect
-      if(isFirstLogin) showScreen('homeScreen');
+      showScreen('homeScreen');
       renderHome();
       requestPush();
       if(!me.username && !lsGet('vax_pass_skipped',false) && isFirstLogin){
