@@ -554,24 +554,29 @@ function setAuthErr2(msg){
 
 // ── WEBSOCKET ─────────────────────────────────────────
 function connectWs(authType, username, password, name=''){
+  // Close existing connection if any
+  if(ws){ try{ ws.close(); }catch(e){} ws=null; }
+
   const proto=location.protocol==='https:'?'wss':'ws';
-  ws=new WebSocket(`${proto}://${location.host}`);
-  ws.onopen=()=>{
+  const newWs=new WebSocket(`${proto}://${location.host}`);
+
+  newWs.onopen=()=>{
+    ws=newWs;
     if(authType==='login'){
       ws.send(JSON.stringify({type:'login', username, password}));
     } else {
       ws.send(JSON.stringify({type:'register', username, password, name}));
     }
   };
-  ws.onmessage=({data})=>handle(JSON.parse(data));
-  ws.onclose=()=>{
+  newWs.onmessage=({data})=>{ try{ handle(JSON.parse(data)); }catch(e){} };
+  newWs.onclose=()=>{
     setBadge('ОФЛАЙН','var(--accent3)');
-    // Reconnect if logged in
     if(me){
       const saved=lsGet('vax_auth',null);
       if(saved) setTimeout(()=>connectWs('login',saved.username,saved.password),3000);
     }
   };
+  newWs.onerror=(e)=>{ console.error('WS error',e); };
 }
 
 function handle(msg){
