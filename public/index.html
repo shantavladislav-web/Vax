@@ -261,7 +261,7 @@ body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradie
     <div class="emoji-panel-body" id="emojiPanelBody"></div>
   </div>
 
-  <!-- ATTACH MENU -->
+  <!-- ATTACH MENU (unused) -->
   <div id="attachMenu" style="display:none;position:fixed;bottom:70px;left:12px;background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:8px;z-index:60;box-shadow:0 4px 24px rgba(0,0,0,.5);flex-direction:column;gap:2px;min-width:170px">
     <button class="attach-menu-btn" onclick="closeAttachMenu();document.getElementById('photoInp').click()">🖼️ Фото</button>
     <button class="attach-menu-btn" onclick="closeAttachMenu();document.getElementById('videoInp').click()">🎬 Відео</button>
@@ -270,10 +270,8 @@ body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradie
 
   <div class="input-row">
     <div class="input-box">
-      <button class="attach-btn" onclick="toggleAttachMenu(event)">📎</button>
-      <input type="file" id="photoInp" accept="image/*" onchange="sendImg(this)" style="display:none">
-      <input type="file" id="videoInp" accept="video/*" onchange="sendVideo(this)" style="display:none">
-      <input type="file" id="docInp" onchange="sendDoc(this)" style="display:none">
+      <button class="attach-btn" onclick="document.getElementById('fileInp').click()">📎</button>
+      <input type="file" id="fileInp" accept="image/*,video/*,application/pdf,.doc,.docx,.txt,.zip,.rar,.mp3,.mp4" onchange="sendFile(this)" style="display:none">
       <input type="file" id="stickerInp" accept="image/*" onchange="addCustomSticker(this)" style="display:none">
       <textarea class="msg-inp" id="msgInp" placeholder="Повідомлення..." rows="1"
         onkeydown="handleKey(event)" oninput="onType(this)"></textarea>
