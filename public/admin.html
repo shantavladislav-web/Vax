@@ -132,7 +132,12 @@ body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradie
 <div class="modal-overlay" id="banModal">
   <div class="modal">
     <div class="modal-title danger">ЗАБЛОКУВАТИ</div>
-    <div class="modal-text">Заблокувати користувача <strong id="banName"></strong>? Він буде відключений і не зможе зайти з цим ID.</div>
+    <div class="modal-text">Заблокувати <strong id="banName"></strong>?<br><br>
+      • Миттєво відключиться і не зможе зайти<br>
+      • Видалиться з усіх груп<br>
+      • <span style="color:var(--accent3)">Через 1 місяць акаунт буде <strong>видалено назавжди</strong></span><br><br>
+      До того моменту можна розблокувати.
+    </div>
     <div class="modal-btns">
       <button class="modal-btn cancel" onclick="closeModal('banModal')">Скасувати</button>
       <button class="modal-btn danger" onclick="confirmBan()">Заблокувати</button>
@@ -199,14 +204,30 @@ function loadStats(){
 
 function renderUsers(users){
   const tb = document.getElementById('usersTable');
-  if(!users.length){ tb.innerHTML='<tr><td colspan="4" style="color:var(--dim);font-family:Share Tech Mono,monospace;font-size:11px;text-align:center;padding:20px">Немає користувачів</td></tr>'; return; }
-  tb.innerHTML = users.map(u => `
-    <tr>
-      <td><span class="user-av" style="background:${u.color}">${u.name.slice(0,2).toUpperCase()}</span>${esc(u.name)}</td>
-      <td style="font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--muted)">${u.id}</td>
-      <td><span class="online-pill ${u.online?'on':'off'}">${u.online?'● ОНЛАЙН':'○ ОФЛАЙН'}</span></td>
-      <td><button class="action-btn" onclick="openBan('${u.id}','${esc(u.name)}')">🚫 Бан</button></td>
-    </tr>`).join('');
+  if(!users.length){ tb.innerHTML='<tr><td colspan="5" style="color:var(--dim);font-family:Share Tech Mono,monospace;font-size:11px;text-align:center;padding:20px">Немає користувачів</td></tr>'; return; }
+  tb.innerHTML = users.map(u => {
+    const banDate = u.banUntil ? new Date(u.banUntil).toLocaleDateString('uk-UA') : '';
+    return `<tr style="${u.banned?'background:rgba(255,45,120,.05)':''}">
+      <td>
+        <span class="user-av" style="background:${u.color}">${u.name.slice(0,2).toUpperCase()}</span>
+        <strong>${esc(u.name)}</strong>
+        ${u.username?`<span style="font-size:10px;color:var(--muted);font-family:Share Tech Mono,monospace;margin-left:4px">@${esc(u.username)}</span>`:''}
+      </td>
+      <td style="font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--muted)">${u.id}</td>
+      <td>
+        ${u.banned
+          ? `<span class="online-pill" style="background:rgba(255,45,120,.15);color:var(--accent3);border-color:rgba(255,45,120,.3)">🚫 БАН до ${banDate}</span>`
+          : `<span class="online-pill ${u.online?'on':'off'}">${u.online?'● ОНЛАЙН':'○ ОФЛАЙН'}</span>`
+        }
+      </td>
+      <td style="display:flex;gap:6px;flex-wrap:wrap">
+        ${u.banned
+          ? `<button class="action-btn edit" onclick="confirmUnban('${u.id}','${esc(u.name)}')">✅ Розбан</button>`
+          : `<button class="action-btn" onclick="openBan('${u.id}','${esc(u.name)}')">🚫 Бан</button>`
+        }
+      </td>
+    </tr>`;
+  }).join('');
 }
 
 function renderGroups(grps){
@@ -228,7 +249,13 @@ function renderGroups(grps){
 function openBan(id, name){ banTarget=id; document.getElementById('banName').textContent=name; openModal('banModal'); }
 function confirmBan(){
   fetch('/api/admin/ban', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ password:pass, userId:banTarget }) })
-    .then(r=>r.json()).then(d=>{ if(d.ok){ toast('Користувача заблоковано'); closeModal('banModal'); loadStats(); } });
+    .then(r=>r.json()).then(d=>{ if(d.ok){ toast('🚫 Користувача заблоковано на 1 місяць'); closeModal('banModal'); loadStats(); } });
+}
+
+function confirmUnban(id, name){
+  if(!confirm(`Розблокувати "${name}"?`)) return;
+  fetch('/api/admin/unban', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ password:pass, userId:id }) })
+    .then(r=>r.json()).then(d=>{ if(d.ok){ toast('✅ Користувача розблоковано'); loadStats(); } });
 }
 
 // DELETE GROUP
