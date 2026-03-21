@@ -58,6 +58,11 @@ async function initDb() {
   // Add ban_until column for auto-unban after 1 month
   await pool.query(`ALTER TABLE banned_users ADD COLUMN IF NOT EXISTS banned_at TIMESTAMPTZ DEFAULT NOW()`);
   await pool.query(`ALTER TABLE banned_users ADD COLUMN IF NOT EXISTS ban_until TIMESTAMPTZ`);
+  // Group write permissions (only for default groups)
+  await pool.query(`CREATE TABLE IF NOT EXISTS group_permissions (
+    group_id TEXT, user_id TEXT, can_write BOOLEAN DEFAULT TRUE,
+    PRIMARY KEY (group_id, user_id)
+  )`);
 
   // Auto-delete banned accounts after 1 month
   setInterval(async () => {
@@ -233,6 +238,12 @@ wss.on('connection', ws => {
     if (d.type === 'group_msg') {
       const gid = String(d.groupId||'');
       if (!await q1(`SELECT 1 FROM group_members WHERE group_id=$1 AND user_id=$2`,[gid,userId])) return;
+      // Check write permission for default groups
+      const grp = await q1(`SELECT is_default FROM groups_tbl WHERE id=$1`,[gid]);
+      if(grp?.is_default){
+        const perm = await q1(`SELECT can_write FROM group_permissions WHERE group_id=$1 AND user_id=$2`,[gid,userId]);
+        if(!perm || !perm.can_write){ send(ws,{type:'error',text:'У вас немає дозволу писати в цій групі'}); return; }
+      }
       const text = String(d.text||'').slice(0,4000).trim(); if (!text) return;
       const id = uuidv4().slice(0,8), time = new Date().toISOString();
       await pool.query(`INSERT INTO group_messages (id,group_id,from_id,from_name,from_color,text,msg_type,time) VALUES ($1,$2,$3,$4,$5,$6,'text',$7)`,
@@ -244,6 +255,11 @@ wss.on('connection', ws => {
     else if (d.type === 'group_img') {
       const gid = String(d.groupId||'');
       if (!await q1(`SELECT 1 FROM group_members WHERE group_id=$1 AND user_id=$2`,[gid,userId])) return;
+      const grp2 = await q1(`SELECT is_default FROM groups_tbl WHERE id=$1`,[gid]);
+      if(grp2?.is_default){
+        const perm2 = await q1(`SELECT can_write FROM group_permissions WHERE group_id=$1 AND user_id=$2`,[gid,userId]);
+        if(!perm2 || !perm2.can_write){ send(ws,{type:'error',text:'У вас немає дозволу писати в цій групі'}); return; }
+      }
       const img = String(d.imageData||''); if (!img||img.length>7000000) return;
       const fileType = String(d.fileType||'');
       const fileName = String(d.fileName||'');
@@ -404,6 +420,21 @@ app.post('/api/admin/unban', async (req,res) => {
     await pool.query(`INSERT INTO group_members (group_id,user_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`,[gid,uid]);
   }
   res.json({ok:true});
+});
+
+// ── PERMISSIONS ────────────────────────────────────────
+app.post('/api/admin/set-permission', async (req,res) => {
+  if (req.body.password!==ADMIN_PASS) return res.status(403).json({ok:false});
+  const { userId, groupId, canWrite } = req.body;
+  await pool.query(`INSERT INTO group_permissions (group_id,user_id,can_write) VALUES ($1,$2,$3)
+    ON CONFLICT (group_id,user_id) DO UPDATE SET can_write=$3`, [groupId, userId, canWrite]);
+  res.json({ok:true});
+});
+
+app.post('/api/admin/get-permissions', async (req,res) => {
+  if (req.body.password!==ADMIN_PASS) return res.status(403).json({ok:false});
+  const perms = await q(`SELECT * FROM group_permissions`);
+  res.json({ok:true, perms});
 });
 
 app.post('/api/admin/delete-user', async (req,res) => {
