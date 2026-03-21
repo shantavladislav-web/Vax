@@ -212,8 +212,26 @@ body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradie
     <div class="login-sub">// SECURE MESSENGER</div>
     <div><div class="lbl">Твій нікнейм</div>
     <input class="inp" id="nameInp" placeholder="Введи нікнейм..." maxlength="24" autocomplete="off"></div>
+    <div id="passWrap"><div class="lbl">Пароль</div>
+    <input class="inp" id="passInp" type="password" placeholder="Введи пароль..." maxlength="64" autocomplete="off"></div>
     <button class="btn-primary" onclick="doLogin()">УВІЙТИ →</button>
-    <div style="font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--dim);text-align:center">Нікнейм зберігається на цьому пристрої</div>
+    <div style="font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--dim);text-align:center">Дані зберігаються на цьому пристрої</div>
+  </div>
+</div>
+
+<!-- ── SET PASSWORD MODAL ── -->
+<div class="overlay" id="setPassSheet">
+  <div class="sheet">
+    <div class="sheet-title" style="color:var(--accent3)">🔐 ВСТАНОВІТЬ ПАРОЛЬ</div>
+    <div style="font-size:13px;color:var(--muted);line-height:1.5">Для безпеки вашого акаунту встановіть пароль. Він буде потрібен при вході з нового пристрою.</div>
+    <div><div class="lbl" style="margin-bottom:6px">Новий пароль</div>
+    <input class="sheet-inp" id="newPassInp" type="password" placeholder="Мінімум 4 символи..." maxlength="64"></div>
+    <div><div class="lbl" style="margin-bottom:6px">Повторіть пароль</div>
+    <input class="sheet-inp" id="newPassInp2" type="password" placeholder="Повторіть пароль..." maxlength="64"></div>
+    <div class="sheet-btns">
+      <button class="sheet-btn cancel" onclick="skipSetPass()">Пропустити</button>
+      <button class="sheet-btn ok" onclick="confirmSetPass()">Встановити</button>
+    </div>
   </div>
 </div>
 
@@ -340,6 +358,8 @@ body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradie
     </div>
     <div><div class="lbl" style="margin-bottom:6px">Змінити нікнейм</div>
     <input class="sheet-inp" id="newNameInp" placeholder="Новий нікнейм..." maxlength="24"></div>
+    <div><div class="lbl" style="margin-bottom:6px">Змінити пароль</div>
+    <input class="sheet-inp" id="changePassInp" type="password" placeholder="Новий пароль (мін. 4 символи)..." maxlength="64"></div>
     <div class="sheet-btns">
       <button class="sheet-btn cancel" onclick="closeSheet('profile')">Закрити</button>
       <button class="sheet-btn ok" onclick="saveNewName()">Зберегти</button>
@@ -379,21 +399,65 @@ function lsGet(k,d=null){try{const v=localStorage.getItem(k);return v!=null?JSON
 function saveDm(uid,msgs){lsSet(LS_DM+uid,msgs.slice(-100));}
 function loadDm(uid){return lsGet(LS_DM+uid,[]);}
 
+// Simple hash for password storage
+async function hashPass(pass){
+  const buf=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(pass));
+  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+
 // ── BOOT ──────────────────────────────────────────────
 window.addEventListener('DOMContentLoaded',()=>{
   const name=lsGet(LS_NAME,'');
-  if(name){document.getElementById('nameInp').value=name; setTimeout(doLogin,200);}
-  // Push permission
+  const passHash=lsGet('vax_pass','');
+  if(name && passHash){
+    // Has both name and password — auto login
+    document.getElementById('nameInp').value=name;
+    document.getElementById('passInp').value='••••••••'; // fake placeholder
+    setTimeout(doLogin,200);
+  } else if(name && !passHash){
+    // Old user without password — show name, focus password
+    document.getElementById('nameInp').value=name;
+    document.getElementById('passInp').focus();
+  }
   if('Notification' in window && Notification.permission==='default') Notification.requestPermission();
-  // Service Worker
   if('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js');
 });
 
-document.getElementById('nameInp').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();});
+document.getElementById('nameInp').addEventListener('keydown',e=>{if(e.key==='Enter')document.getElementById('passInp').focus();});
+document.getElementById('passInp').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();});
 
-function doLogin(){
+async function doLogin(){
   const name=document.getElementById('nameInp').value.trim();
   if(!name){document.getElementById('nameInp').classList.add('inp-err');setTimeout(()=>document.getElementById('nameInp').classList.remove('inp-err'),800);return;}
+
+  const passVal=document.getElementById('passInp').value;
+  const storedHash=lsGet('vax_pass','');
+
+  // If user has stored password
+  if(storedHash){
+    // Check if it's auto-login (fake placeholder)
+    if(passVal==='••••••••'){
+      // auto login — use stored hash
+      lsSet(LS_NAME,name);
+      showScreen('homeScreen');
+      connect(name);
+      return;
+    }
+    if(!passVal){document.getElementById('passInp').classList.add('inp-err');setTimeout(()=>document.getElementById('passInp').classList.remove('inp-err'),800);return;}
+    const hash=await hashPass(passVal);
+    if(hash!==storedHash){
+      document.getElementById('passInp').classList.add('inp-err');
+      document.getElementById('passInp').value='';
+      document.getElementById('passInp').placeholder='Невірний пароль!';
+      setTimeout(()=>{document.getElementById('passInp').classList.remove('inp-err');document.getElementById('passInp').placeholder='Введи пароль...';},1500);
+      return;
+    }
+  } else if(passVal && passVal!=='••••••••'){
+    // New password being set on login
+    const hash=await hashPass(passVal);
+    lsSet('vax_pass',hash);
+  }
+
   lsSet(LS_NAME,name);
   showScreen('homeScreen');
   connect(name);
@@ -418,16 +482,16 @@ function handle(msg){
       me=msg.user;
       lsSet(LS_UID, me.id);
       setBadge('●','var(--green)');
-      // Set avatar
       const av=document.getElementById('myAv');
       av.style.background=me.color; av.textContent=ini(me.name);
-      // Store groups
       msg.groups.forEach(g=>{ groups[g.id]=g; });
-      // Store contacts
       msg.contacts.forEach(c=>{ contacts[c.id]=c; });
       renderHome();
-      // Request push sub
       requestPush();
+      // Show set password modal for old users who don't have password yet
+      if(!lsGet('vax_pass','') && !lsGet('vax_pass_skipped',false)){
+        setTimeout(()=>document.getElementById('setPassSheet').classList.add('open'), 1000);
+      }
       break;
 
     case 'group_msg':
@@ -871,11 +935,20 @@ function openProfile(){
   document.getElementById('newNameInp').value='';
   openSheet('profile');
 }
-function saveNewName(){
-  const name=document.getElementById('newNameInp').value.trim(); if(!name) return;
-  lsSet(LS_NAME,name);
+async function saveNewName(){
+  const name=document.getElementById('newNameInp').value.trim();
+  const newPass=document.getElementById('changePassInp').value;
+  if(name){ lsSet(LS_NAME,name); }
+  if(newPass){
+    if(newPass.length<4){toast('Пароль мінімум 4 символи');return;}
+    const hash=await hashPass(newPass);
+    lsSet('vax_pass',hash);
+    toast('✅ Пароль змінено!');
+  } else if(name) {
+    toast('Нікнейм збережено. Оновіть сторінку.');
+  }
   closeSheet('profile');
-  toast('Нікнейм збережено. Оновіть сторінку.');
+  document.getElementById('changePassInp').value='';
 }
 
 // ── ATTACH MENU ───────────────────────────────────────
@@ -897,6 +970,23 @@ document.addEventListener('click', e=>{
 function sendImg(inp){ sendFile(inp); }
 function sendVideo(inp){ sendFile(inp); }
 function sendDoc(inp){ sendFile(inp); }
+
+// ── PASSWORD SETUP ────────────────────────────────────
+async function confirmSetPass(){
+  const p1=document.getElementById('newPassInp').value;
+  const p2=document.getElementById('newPassInp2').value;
+  if(!p1||p1.length<4){toast('Пароль мінімум 4 символи');return;}
+  if(p1!==p2){toast('Паролі не співпадають');document.getElementById('newPassInp2').classList.add('inp-err');setTimeout(()=>document.getElementById('newPassInp2').classList.remove('inp-err'),800);return;}
+  const hash=await hashPass(p1);
+  lsSet('vax_pass',hash);
+  document.getElementById('setPassSheet').classList.remove('open');
+  toast('✅ Пароль встановлено!');
+}
+
+function skipSetPass(){
+  lsSet('vax_pass_skipped',true);
+  document.getElementById('setPassSheet').classList.remove('open');
+}
 
 // ── NEW CHAT ──────────────────────────────────────────
 function openNewChat(){ openSheet('newChat'); }
