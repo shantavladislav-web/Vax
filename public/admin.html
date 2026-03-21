@@ -126,6 +126,18 @@ body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradie
       <tbody id="groupsTable"></tbody>
     </table>
   </div>
+
+  <!-- PERMISSIONS -->
+  <div class="section">
+    <div class="section-title">
+      ДОЗВОЛИ НА ЗАПИС (стандартні групи)
+      <button class="refresh-btn" onclick="loadPermissions()">↻ Оновити</button>
+    </div>
+    <div style="padding:12px 16px;font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--muted)">
+      Виберіть користувача і налаштуйте доступ до кожної групи:
+    </div>
+    <div id="permissionsTable" style="padding:0 16px 16px"></div>
+  </div>
 </div>
 
 <!-- BAN MODAL -->
@@ -197,8 +209,10 @@ function loadStats(){
       document.getElementById('statTotal').textContent = s.totalUsers;
       document.getElementById('statGroups').textContent = s.groupCount;
       document.getElementById('lastUpdated').textContent = 'Оновлено: ' + new Date().toLocaleTimeString('uk-UA', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+      allUsers = s.users;
       renderUsers(s.users);
       renderGroups(s.groups);
+      loadPermissions();
     });
 }
 
@@ -285,6 +299,72 @@ function openModal(id){ document.getElementById(id).classList.add('open'); }
 function closeModal(id){ document.getElementById(id).classList.remove('open'); }
 function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),3000); }
+
+// ── PERMISSIONS ────────────────────────────────────────
+let allUsers = [];
+let permCache = {};
+const DEFAULT_GROUPS = [
+  {id:'g_general', name:'Загальний', emoji:'💬'},
+  {id:'g_games',   name:'Ігри',      emoji:'🎮'},
+  {id:'g_music',   name:'Музика',     emoji:'🎵'},
+];
+
+async function loadPermissions(){
+  const r = await fetch('/api/admin/get-permissions', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:pass})});
+  const d = await r.json(); if(!d.ok) return;
+  permCache = {};
+  d.perms.forEach(p=>{ if(!permCache[p.user_id]) permCache[p.user_id]={}; permCache[p.user_id][p.group_id]=p.can_write; });
+  renderPermissions();
+}
+
+function renderPermissions(){
+  const el = document.getElementById('permissionsTable');
+  if(!allUsers.length){ el.innerHTML='<div style="color:var(--dim);font-size:12px">Немає користувачів</div>'; return; }
+  const nonBanned = allUsers.filter(u=>!u.banned);
+  el.innerHTML = `
+    <table class="tbl" style="width:100%">
+      <thead><tr>
+        <th>КОРИСТУВАЧ</th>
+        ${DEFAULT_GROUPS.map(g=>`<th>${g.emoji} ${g.name}</th>`).join('')}
+      </tr></thead>
+      <tbody>
+        ${nonBanned.map(u=>`
+          <tr>
+            <td>
+              <span class="user-av" style="background:${u.color};display:inline-flex;width:24px;height:24px;font-size:10px">${u.name.slice(0,2).toUpperCase()}</span>
+              ${esc(u.name)}
+              ${u.username?`<span style="font-size:10px;color:var(--muted);font-family:Share Tech Mono,monospace"> @${esc(u.username)}</span>`:''}
+            </td>
+            ${DEFAULT_GROUPS.map(g=>{
+              const hasPermRow = permCache[u.id]?.[g.id];
+              const canWrite = hasPermRow === undefined ? false : hasPermRow;
+              return `<td style="text-align:center">
+                <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer">
+                  <input type="checkbox" ${canWrite?'checked':''} 
+                    onchange="setPermission('${u.id}','${g.id}',this.checked)"
+                    style="width:16px;height:16px;accent-color:var(--accent);cursor:pointer">
+                  <span style="font-size:11px;font-family:Share Tech Mono,monospace;color:${canWrite?'var(--green)':'var(--dim)'}">${canWrite?'ТАК':'НІ'}</span>
+                </label>
+              </td>`;
+            }).join('')}
+          </tr>`).join('')}
+      </tbody>
+    </table>`;
+}
+
+async function setPermission(userId, groupId, canWrite){
+  const r = await fetch('/api/admin/set-permission', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({password:pass, userId, groupId, canWrite})
+  });
+  const d = await r.json();
+  if(d.ok){
+    if(!permCache[userId]) permCache[userId]={};
+    permCache[userId][groupId]=canWrite;
+    renderPermissions();
+    toast(canWrite ? '✅ Дозвіл надано' : '🚫 Дозвіл знято');
+  }
+}
 
 document.getElementById('passInp').addEventListener('keydown', e => { if(e.key==='Enter') adminLogin(); });
 document.querySelectorAll('.modal-overlay').forEach(m => m.addEventListener('click', e => { if(e.target===m) m.classList.remove('open'); }));
