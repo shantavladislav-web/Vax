@@ -577,10 +577,11 @@ body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradie
 <!-- Incoming call -->
 <div id="incomingCall" style="display:none;position:fixed;top:20px;left:50%;transform:translateX(-50%);background:var(--panel);border:1px solid var(--border);border-radius:20px;padding:20px 24px;z-index:300;box-shadow:0 8px 32px rgba(0,0,0,.5);min-width:280px;text-align:center">
   <div id="incomingName" style="font-family:'Rajdhani',sans-serif;font-size:20px;font-weight:700;color:#fff;margin-bottom:4px"></div>
-  <div style="font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--muted);margin-bottom:16px">ВХІДНИЙ ДЗВІНОК...</div>
+  <div id="incomingType" style="font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--muted);margin-bottom:16px">ВХІДНИЙ ДЗВІНОК...</div>
   <div style="display:flex;gap:16px;justify-content:center">
     <button onclick="rejectCall()" style="width:56px;height:56px;border-radius:50%;background:#ff2d78;border:none;color:#fff;font-size:24px;cursor:pointer">📵</button>
-    <button onclick="acceptCall()" style="width:56px;height:56px;border-radius:50%;background:#00e676;border:none;color:#fff;font-size:24px;cursor:pointer">📞</button>
+    <button id="acceptAudioBtn" onclick="acceptCall(false)" style="width:56px;height:56px;border-radius:50%;background:#00e676;border:none;color:#fff;font-size:24px;cursor:pointer">📞</button>
+    <button id="acceptVideoBtn" onclick="acceptCall(true)" style="display:none;width:56px;height:56px;border-radius:50%;background:#00bfff;border:none;color:#fff;font-size:24px;cursor:pointer">📹</button>
   </div>
 </div>
 
@@ -917,6 +918,8 @@ function handle(msg){
       const caller = contacts[msg.fromId]||{name:'?',color:'#888'};
       // Show in-app UI
       document.getElementById('incomingName').textContent = caller.name;
+      document.getElementById('incomingType').textContent = isVideoCall ? '📹 ВІДЕОДЗВІНОК...' : '📞 ВХІДНИЙ ДЗВІНОК...';
+      document.getElementById('acceptVideoBtn').style.display = isVideoCall ? 'flex' : 'none';
       document.getElementById('incomingCall').style.display='block';
       playRingtone();
       window._pendingOffer = msg.offer;
@@ -2052,7 +2055,9 @@ async function initCall(isInitiator, toId){
   }
 }
 
-async function acceptCall(){
+async function acceptCall(withVideo=null){
+  // If withVideo explicitly passed, override isVideoCall
+  if(withVideo !== null) isVideoCall = withVideo;
   document.getElementById('incomingCall').style.display='none';
   const c = contacts[callWith]||{};
   showCallScreen(c.name||'?', c.color||'#888', true);
