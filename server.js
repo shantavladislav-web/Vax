@@ -62,6 +62,12 @@ async function initDb() {
       [g.id, g.name, g.emoji]
     );
   }
+  // Add file_name column if not exists (migration)
+  await pool.query(`ALTER TABLE group_messages ADD COLUMN IF NOT EXISTS file_name TEXT`);
+  await pool.query(`ALTER TABLE dm_messages ADD COLUMN IF NOT EXISTS file_name TEXT`);
+  await pool.query(`ALTER TABLE group_messages ADD COLUMN IF NOT EXISTS file_type TEXT`);
+  await pool.query(`ALTER TABLE dm_messages ADD COLUMN IF NOT EXISTS file_type TEXT`);
+
   console.log('DB ready');
 }
 
@@ -94,7 +100,7 @@ function broadcastAll(p, exUid = null) {
 
 function rowToMsg(r) {
   if (!r) return null;
-  return { id: r.id, from: { id: r.from_id, name: r.from_name, color: r.from_color }, text: r.text||undefined, imageData: r.image_data||undefined, msgType: r.msg_type, time: r.time };
+  return { id: r.id, from: { id: r.from_id, name: r.from_name, color: r.from_color }, text: r.text||undefined, imageData: r.image_data||undefined, fileName: r.file_name||undefined, fileType: r.file_type||undefined, msgType: r.msg_type, time: r.time };
 }
 
 async function getGroupInfo(gid) {
@@ -165,10 +171,13 @@ wss.on('connection', ws => {
       const gid = String(d.groupId||'');
       if (!await q1(`SELECT 1 FROM group_members WHERE group_id=$1 AND user_id=$2`,[gid,userId])) return;
       const img = String(d.imageData||''); if (!img||img.length>7000000) return;
+      const fileType = String(d.fileType||'');
+      const fileName = String(d.fileName||'');
+      const msgType = fileType.startsWith('image/')?'image':fileType.startsWith('video/')?'video':fileType.startsWith('audio/')?'audio':'file';
       const id = uuidv4().slice(0,8), time = new Date().toISOString();
-      await pool.query(`INSERT INTO group_messages (id,group_id,from_id,from_name,from_color,image_data,msg_type,time) VALUES ($1,$2,$3,$4,$5,$6,'image',$7)`,
-        [id,gid,userId,user.name,user.color,img,time]);
-      const msg = { id, from:{id:userId,name:user.name,color:user.color}, imageData:img, msgType:'image', time };
+      await pool.query(`INSERT INTO group_messages (id,group_id,from_id,from_name,from_color,image_data,msg_type,file_name,file_type,time) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+        [id,gid,userId,user.name,user.color,img,msgType,fileName,fileType,time]);
+      const msg = { id, from:{id:userId,name:user.name,color:user.color}, imageData:img, fileName, fileType, msgType, time };
       broadcastGroup(gid, { type:'group_msg', groupId:gid, msg }, userId);
     }
 
@@ -185,10 +194,13 @@ wss.on('connection', ws => {
     else if (d.type === 'dm_img') {
       const toId = String(d.toId||''); if (!toId||toId===userId) return;
       const img = String(d.imageData||''); if (!img||img.length>7000000) return;
+      const fileType = String(d.fileType||'');
+      const fileName = String(d.fileName||'');
+      const msgType = fileType.startsWith('image/')?'image':fileType.startsWith('video/')?'video':fileType.startsWith('audio/')?'audio':'file';
       const id = uuidv4().slice(0,8), time = new Date().toISOString();
-      await pool.query(`INSERT INTO dm_messages (id,from_id,to_id,from_name,from_color,image_data,msg_type,time) VALUES ($1,$2,$3,$4,$5,$6,'image',$7)`,
-        [id,userId,toId,user.name,user.color,img,time]);
-      const msg = { id, from:{id:userId,name:user.name,color:user.color}, imageData:img, msgType:'image', time };
+      await pool.query(`INSERT INTO dm_messages (id,from_id,to_id,from_name,from_color,image_data,msg_type,file_name,file_type,time) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+        [id,userId,toId,user.name,user.color,img,msgType,fileName,fileType,time]);
+      const msg = { id, from:{id:userId,name:user.name,color:user.color}, imageData:img, fileName, fileType, msgType, time };
       sendTo(toId, { type:'dm_msg', dmWith:userId, msg, fromName:user.name, fromColor:user.color });
     }
 
