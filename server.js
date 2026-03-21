@@ -117,6 +117,15 @@ async function initDb() {
     msg_id TEXT, user_id TEXT, emoji TEXT,
     PRIMARY KEY (msg_id, user_id)
   )`);
+  // Polls
+  await pool.query(`CREATE TABLE IF NOT EXISTS polls (
+    id TEXT PRIMARY KEY, group_id TEXT, from_id TEXT, from_name TEXT,
+    question TEXT, options JSONB, time TEXT
+  )`);
+  await pool.query(`CREATE TABLE IF NOT EXISTS poll_votes (
+    poll_id TEXT, user_id TEXT, option_idx INTEGER,
+    PRIMARY KEY (poll_id, user_id)
+  )`);
 
   console.log('DB ready');
 }
@@ -410,7 +419,16 @@ wss.on('connection', ws => {
     else if (d.type === 'get_group') {
       const gid = String(d.groupId||'');
       const rows = await q(`SELECT * FROM group_messages WHERE group_id=$1 ORDER BY time ASC LIMIT 100`, [gid]);
-      send(ws, { type:'group_history', groupId:gid, messages:rows.map(rowToMsg), info: await getGroupInfo(gid) });
+      const pollRows = await q(`SELECT p.*, COALESCE(json_object_agg(pv.option_idx::text, pv.voters) FILTER (WHERE pv.option_idx IS NOT NULL), '{}') as votes FROM polls p LEFT JOIN (SELECT poll_id, option_idx, json_agg(user_id) as voters FROM poll_votes GROUP BY poll_id, option_idx) pv ON p.id=pv.poll_id WHERE p.group_id=$1 GROUP BY p.id ORDER BY p.time ASC`, [gid]).catch(()=>[]);
+      // Simple polls query
+      const polls = await q(`SELECT * FROM polls WHERE group_id=$1 ORDER BY time ASC`,[gid]);
+      const pollsWithVotes = await Promise.all(polls.map(async p=>{
+        const votes = await q(`SELECT user_id, option_idx FROM poll_votes WHERE poll_id=$1`,[p.id]);
+        const votesMap = {};
+        votes.forEach(v=>{ if(!votesMap[v.option_idx]) votesMap[v.option_idx]=[]; votesMap[v.option_idx].push(v.user_id); });
+        return { id:p.id, groupId:p.group_id, from:{id:p.from_id,name:p.from_name}, question:p.question, options:p.options, votes:votesMap, time:p.time };
+      }));
+      send(ws, { type:'group_history', groupId:gid, messages:rows.map(rowToMsg), polls:pollsWithVotes, info: await getGroupInfo(gid) });
     }
 
     else if (d.type === 'get_dm') {
@@ -471,6 +489,40 @@ wss.on('connection', ws => {
         if (s) { s.name = updated.name; s.color = updated.color; }
         send(ws, { type:'profile_updated', user:{id:userId, name:updated.name, color:updated.color, username:updated.username} });
       }
+    }
+
+    // ── CREATE POLL ──
+    else if (d.type === 'create_poll') {
+      const gid = String(d.groupId||'');
+      if (!await q1(`SELECT 1 FROM group_members WHERE group_id=$1 AND user_id=$2`,[gid,userId])) return;
+      const question = String(d.question||'').slice(0,200).trim(); if(!question) return;
+      const options = (Array.isArray(d.options)?d.options:[]).slice(0,6).map(o=>String(o).slice(0,100).trim()).filter(Boolean);
+      if(options.length < 2) return;
+      const pid = uuidv4().slice(0,8), time = new Date().toISOString();
+      await pool.query(`INSERT INTO polls (id,group_id,from_id,from_name,question,options,time) VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+        [pid,gid,userId,user.name,question,JSON.stringify(options),time]);
+      const poll = { id:pid, groupId:gid, from:{id:userId,name:user.name,color:user.color}, question, options, votes:{}, time };
+      broadcastGroup(gid, { type:'poll', groupId:gid, poll });
+    }
+
+    // ── VOTE POLL ──
+    else if (d.type === 'poll_vote') {
+      const pid = String(d.pollId||'');
+      const idx = parseInt(d.optionIdx);
+      const poll = await q1(`SELECT * FROM polls WHERE id=$1`,[pid]); if(!poll) return;
+      // Toggle vote
+      const existing = await q1(`SELECT option_idx FROM poll_votes WHERE poll_id=$1 AND user_id=$2`,[pid,userId]);
+      if(existing){
+        if(existing.option_idx===idx) await pool.query(`DELETE FROM poll_votes WHERE poll_id=$1 AND user_id=$2`,[pid,userId]);
+        else await pool.query(`UPDATE poll_votes SET option_idx=$1 WHERE poll_id=$2 AND user_id=$3`,[idx,pid,userId]);
+      } else {
+        await pool.query(`INSERT INTO poll_votes (poll_id,user_id,option_idx) VALUES ($1,$2,$3)`,[pid,userId,idx]);
+      }
+      // Get all votes
+      const allVotes = await q(`SELECT user_id, option_idx FROM poll_votes WHERE poll_id=$1`,[pid]);
+      const votesMap = {};
+      allVotes.forEach(v=>{ if(!votesMap[v.option_idx]) votesMap[v.option_idx]=[]; votesMap[v.option_idx].push(v.user_id); });
+      broadcastGroup(poll.group_id, { type:'poll_updated', pollId:pid, votes:votesMap });
     }
 
     else if (d.type === 'ping') {
