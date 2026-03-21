@@ -1,4 +1,4 @@
-const CACHE = 'vax-v3';
+const CACHE = 'vax-v4';
 const ASSETS = ['/', '/manifest.json', '/icons/icon-192.png', '/icons/icon-512.png'];
 
 self.addEventListener('install', e => {
@@ -15,6 +15,12 @@ self.addEventListener('activate', e => {
 
 self.addEventListener('fetch', e => {
   if (e.request.method !== 'GET') return;
+  // Не кешувати медіафайли та API запити
+  const url = e.request.url;
+  if (url.includes('/api/') || url.includes('storageapi') || url.includes('.webm') || url.includes('.mp4') || url.includes('.mp3') || url.includes('.ogg')) {
+    e.respondWith(fetch(e.request));
+    return;
+  }
   e.respondWith(fetch(e.request).catch(() => caches.match(e.request)));
 });
 
