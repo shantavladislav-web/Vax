@@ -186,6 +186,17 @@ body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradie
 
 /* bubble sticker */
 .bubble-sticker{max-width:120px;max-height:120px;border-radius:12px;display:block;cursor:pointer;margin:2px 0}
+/* attach menu */
+.attach-menu-btn{display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:8px;border:none;background:none;color:var(--text);font-family:'Exo 2',sans-serif;font-size:14px;cursor:pointer;width:100%;text-align:left;transition:background .1s}
+.attach-menu-btn:active{background:var(--hover)}
+/* video bubble */
+.bubble-video{max-width:260px;max-height:200px;border-radius:12px;display:block;margin-top:4px;outline:none}
+/* file bubble */
+.bubble-file{display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--card);border:1px solid var(--border);border-radius:12px;cursor:pointer;text-decoration:none;color:var(--text);margin-top:4px;max-width:260px}
+.bubble-file-icon{font-size:24px;flex-shrink:0}
+.bubble-file-info{min-width:0}
+.bubble-file-name{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bubble-file-size{font-size:11px;color:var(--muted);font-family:'Share Tech Mono',monospace}
 </style>
 </head>
 <body>
@@ -246,10 +257,19 @@ body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradie
     <div class="emoji-panel-body" id="emojiPanelBody"></div>
   </div>
 
+  <!-- ATTACH MENU -->
+  <div id="attachMenu" style="display:none;position:fixed;bottom:70px;left:12px;background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:8px;z-index:60;box-shadow:0 4px 24px rgba(0,0,0,.5);flex-direction:column;gap:2px;min-width:170px">
+    <button class="attach-menu-btn" onclick="closeAttachMenu();document.getElementById('photoInp').click()">🖼️ Фото</button>
+    <button class="attach-menu-btn" onclick="closeAttachMenu();document.getElementById('videoInp').click()">🎬 Відео</button>
+    <button class="attach-menu-btn" onclick="closeAttachMenu();document.getElementById('docInp').click()">📄 Файл</button>
+  </div>
+
   <div class="input-row">
     <div class="input-box">
-      <button class="attach-btn" onclick="document.getElementById('fileInp').click()">📎</button>
-      <input type="file" id="fileInp" accept="image/*" onchange="sendImg(this)">
+      <button class="attach-btn" onclick="toggleAttachMenu()">📎</button>
+      <input type="file" id="photoInp" accept="image/*" onchange="sendImg(this)" style="display:none">
+      <input type="file" id="videoInp" accept="video/*" onchange="sendVideo(this)" style="display:none">
+      <input type="file" id="docInp" onchange="sendDoc(this)" style="display:none">
       <input type="file" id="stickerInp" accept="image/*" onchange="addCustomSticker(this)" style="display:none">
       <textarea class="msg-inp" id="msgInp" placeholder="Повідомлення..." rows="1"
         onkeydown="handleKey(event)" oninput="onType(this)"></textarea>
@@ -637,6 +657,14 @@ function appendMsg(msg, doScroll=true){
   let content='';
   if(msg.msgType==='sticker'){
     content=`<img class="bubble-sticker" src="${msg.imageData}" onclick="openLb('${msg.imageData}')" alt="стікер">`;
+  } else if(msg.msgType==='video'){
+    content=`<video controls style="max-width:min(260px,65vw);border-radius:10px;display:block;margin-top:4px" src="${msg.imageData}"></video>`;
+  } else if(msg.msgType==='file'){
+    const name=msg.fileName||'файл';
+    content=`<a href="${msg.imageData}" download="${esc(name)}" style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:rgba(255,255,255,.05);border-radius:8px;border:1px solid var(--border);text-decoration:none;color:var(--accent);font-size:13px;margin-top:4px">
+      <span style="font-size:20px">📄</span>
+      <span style="word-break:break-word">${esc(name)}</span>
+    </a>`;
   } else if(msg.msgType==='image'){
     content=`<img class="bubble-img" src="${msg.imageData}" onclick="openLb('${msg.imageData}')" alt="фото">`;
   } else {
@@ -703,21 +731,22 @@ function onType(el){
   }
 }
 
-function sendImg(inp){
+function sendFile(inp){
   const file=inp.files[0]; if(!file) return;
-  if(file.size>6*1024*1024){toast('Файл занадто великий (макс 6МБ)');return;}
+  const isImage=file.type.startsWith('image/');
+  const isVideo=file.type.startsWith('video/');
+  const maxSize=isVideo?30*1024*1024:10*1024*1024;
+  if(file.size>maxSize){toast(`Файл занадто великий (макс ${isVideo?'30':'10'}МБ)`);inp.value='';return;}
+  const msgType=isImage?'image':isVideo?'video':'file';
   const r=new FileReader();
   r.onload=e=>{
-    const imageData=e.target.result;
+    const data=e.target.result;
+    const msg={id:'t'+Date.now(),from:{id:me.id,name:me.name,color:me.color},imageData:data,fileName:file.name,fileType:file.type,time:new Date().toISOString(),msgType};
     if(currentChat.type==='group'){
-      ws.send(JSON.stringify({type:'group_img',groupId:currentChat.id,imageData}));
-      // Group: show locally (server does NOT echo back)
-      const msg={id:'t'+Date.now(),from:{id:me.id,name:me.name,color:me.color},imageData,time:new Date().toISOString(),msgType:'image'};
+      ws.send(JSON.stringify({type:'group_img',groupId:currentChat.id,imageData:data,fileName:file.name,fileType:file.type}));
       appendMsg(msg);
     } else {
-      ws.send(JSON.stringify({type:'dm_img',toId:currentChat.id,imageData}));
-      // DM: server does NOT echo back, show locally
-      const msg={id:'t'+Date.now(),from:{id:me.id,name:me.name,color:me.color},imageData,time:new Date().toISOString(),msgType:'image'};
+      ws.send(JSON.stringify({type:'dm_img',toId:currentChat.id,imageData:data,fileName:file.name,fileType:file.type}));
       appendMsg(msg);
       if(!dmHistories[currentChat.id]) dmHistories[currentChat.id]=[];
       dmHistories[currentChat.id].push(msg);
@@ -893,6 +922,88 @@ function fmtTime(iso){ try{return new Date(iso).toLocaleTimeString('uk-UA',{hour
 function linkify(s){ return s.replace(/(https?:\/\/[^\s<]+)/g,'<a href="$1" target="_blank" rel="noopener" style="color:var(--accent)">$1</a>'); }
 function setBadge(txt,color){ const b=document.getElementById('connBadge'); b.textContent=txt; b.style.color=color; }
 function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),3000); }
+
+// ── ATTACH MENU ───────────────────────────────────────
+let attachMenuOpen = false;
+function toggleAttachMenu(){
+  attachMenuOpen = !attachMenuOpen;
+  const m = document.getElementById('attachMenu');
+  m.style.display = attachMenuOpen ? 'flex' : 'none';
+  if(attachMenuOpen) closeEmojiPanel();
+}
+function closeAttachMenu(){
+  attachMenuOpen = false;
+  document.getElementById('attachMenu').style.display = 'none';
+}
+
+// ── SEND VIDEO ────────────────────────────────────────
+function sendVideo(inp){
+  const file = inp.files[0]; if(!file) return;
+  if(file.size > 20*1024*1024){ toast('Відео занадто велике (макс 20МБ)'); return; }
+  const r = new FileReader();
+  r.onload = e => {
+    const data = e.target.result;
+    const payload = { imageData: data, msgType: 'video', fileName: file.name };
+    _sendMedia(payload);
+  };
+  r.readAsDataURL(file);
+  inp.value = '';
+}
+
+// ── SEND FILE/DOC ─────────────────────────────────────
+function sendDoc(inp){
+  const file = inp.files[0]; if(!file) return;
+  if(file.size > 20*1024*1024){ toast('Файл занадто великий (макс 20МБ)'); return; }
+  const r = new FileReader();
+  r.onload = e => {
+    const data = e.target.result;
+    const payload = { imageData: data, msgType: 'file', fileName: file.name, fileSize: file.size };
+    _sendMedia(payload);
+  };
+  r.readAsDataURL(file);
+  inp.value = '';
+}
+
+function _sendMedia(payload){
+  if(!currentChat||!ws||ws.readyState!==1) return;
+  const msg = { id:'t'+Date.now(), from:{id:me.id,name:me.name,color:me.color}, imageData:payload.imageData, msgType:payload.msgType, fileName:payload.fileName, fileSize:payload.fileSize, time:new Date().toISOString() };
+  if(currentChat.type==='group'){
+    ws.send(JSON.stringify({type:'group_img', groupId:currentChat.id, imageData:payload.imageData, msgType:payload.msgType, fileName:payload.fileName}));
+    appendMsg(msg);
+  } else {
+    ws.send(JSON.stringify({type:'dm_img', toId:currentChat.id, imageData:payload.imageData, msgType:payload.msgType, fileName:payload.fileName}));
+    appendMsg(msg);
+    if(!dmHistories[currentChat.id]) dmHistories[currentChat.id]=[];
+    dmHistories[currentChat.id].push(msg);
+    saveDm(currentChat.id, dmHistories[currentChat.id]);
+  }
+}
+
+function formatSize(bytes){
+  if(!bytes) return '';
+  if(bytes<1024) return bytes+'B';
+  if(bytes<1024*1024) return (bytes/1024).toFixed(1)+'KB';
+  return (bytes/1024/1024).toFixed(1)+'MB';
+}
+
+function getFileIcon(name){
+  const ext=(name.split('.').pop()||'').toLowerCase();
+  if(['jpg','jpeg','png','gif','webp','svg'].includes(ext)) return '🖼️';
+  if(['mp4','mov','avi','mkv','webm'].includes(ext)) return '🎬';
+  if(['mp3','wav','ogg','aac','flac'].includes(ext)) return '🎵';
+  if(['pdf'].includes(ext)) return '📕';
+  if(['doc','docx'].includes(ext)) return '📝';
+  if(['xls','xlsx'].includes(ext)) return '📊';
+  if(['zip','rar','7z'].includes(ext)) return '🗜️';
+  return '📄';
+}
+
+// Close attach menu on outside click
+document.addEventListener('click', e=>{
+  if(attachMenuOpen && !e.target.closest('#attachMenu') && !e.target.closest('#attachBtn')){
+    closeAttachMenu();
+  }
+});
 
 // ── EMOJI & STICKERS ──────────────────────────────────
 const EMOJIS_ALL = [
