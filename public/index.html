@@ -1708,17 +1708,42 @@ async function sendVoiceMsg(){
 
 // ── VOICE PLAYER ──────────────────────────────────────
 function playVoice(btn, src, durationEl){
-  const audio = btn._audio || (btn._audio = new Audio(src));
-  if(!audio.paused){ audio.pause(); btn.textContent='▶'; return; }
-  // Stop all other voice messages
-  document.querySelectorAll('.voice-play').forEach(b=>{ if(b!==btn&&b._audio) b._audio.pause(); b.textContent='▶'; });
-  audio.play();
-  btn.textContent='⏸';
+  // Якщо вже грає — зупинити
+  if(btn._audio && !btn._audio.paused){
+    btn._audio.pause();
+    btn.textContent='▶';
+    return;
+  }
+  // Зупинити всі інші
+  document.querySelectorAll('.voice-play').forEach(b=>{
+    if(b!==btn && b._audio){ b._audio.pause(); b._audio.currentTime=0; }
+    if(b!==btn) b.textContent='▶';
+  });
+  // Завжди створювати новий Audio (фікс Android кешу)
+  if(btn._audio){ btn._audio.src=''; }
+  const audio = new Audio();
+  audio.preload = 'auto';
+  btn._audio = audio;
+
+  audio.onerror = ()=>{
+    console.error('Voice play error:', audio.error);
+    btn.textContent='▶';
+    btn.style.background='#ff2d78';
+    setTimeout(()=>btn.style.background='',2000);
+  };
+  audio.oncanplay = ()=>{
+    audio.play().catch(err=>{ console.error('play() failed:', err); btn.textContent='▶'; });
+    btn.textContent='⏸';
+  };
   audio.ontimeupdate = ()=>{
-    const left = Math.round(audio.duration-audio.currentTime)||0;
+    const left = Math.max(0, Math.round((audio.duration||0) - audio.currentTime));
     if(durationEl) durationEl.textContent = `0:${String(left).padStart(2,'0')}`;
   };
-  audio.onended = ()=>{ btn.textContent='▶'; };
+  audio.onended = ()=>{ btn.textContent='▶'; if(durationEl && btn._origDur) durationEl.textContent=btn._origDur; };
+  // Зберегти оригінальну тривалість
+  if(durationEl) btn._origDur = durationEl.textContent;
+  audio.src = src; // встановити після обробників
+  audio.load();   // явний load — критично для Android
 }
 
 // ── LANGUAGE ──────────────────────────────────────────
