@@ -647,7 +647,14 @@ function handle(msg){
     case 'dm_history':
       dmHistories[msg.toId]=msg.messages;
       saveDm(msg.toId, msg.messages);
-      if(currentChat&&currentChat.type==='dm'&&currentChat.id===msg.toId) renderMessages(msg.messages);
+      // Only re-render if this is the active chat AND messages area is empty or stale
+      if(currentChat&&currentChat.type==='dm'&&currentChat.id===msg.toId){
+        const el=document.getElementById('messages');
+        // Only render if we have more messages from server than locally shown
+        if(el.querySelectorAll('[data-msg-id]').length < msg.messages.length){
+          renderMessages(msg.messages);
+        }
+      }
       break;
 
     case 'group_created':
@@ -939,9 +946,7 @@ function sendMsg(){
   // Edit mode
   if(editingMsgId){
     ws.send(JSON.stringify({type:'edit_msg', msgId:editingMsgId, text}));
-    // Update locally
-    const el=document.querySelector(`[data-msg-id="${editingMsgId}"] .bubble`);
-    if(el){ const textEl=el.querySelector('div'); if(textEl) textEl.innerHTML=linkify(esc(text)); }
+    updateMsgLocally(editingMsgId, 'edited', {text});
     inp.value=''; inp.style.height='';
     cancelEdit(); return;
   }
@@ -956,7 +961,6 @@ function sendMsg(){
     if(!groupHistories[currentChat.id]) groupHistories[currentChat.id]=[];
     groupHistories[currentChat.id].push(msg);
     if(groups[currentChat.id]) groups[currentChat.id].lastMsg=msg;
-    renderHome();
   } else {
     ws.send(JSON.stringify({type:'dm',toId:currentChat.id,text,replyTo,replyPreview}));
     const msg={id:'t'+Date.now(),from:{id:me.id,name:me.name,color:me.color},text,time:new Date().toISOString(),msgType:'text',replyTo,replyPreview};
@@ -964,7 +968,6 @@ function sendMsg(){
     if(!dmHistories[currentChat.id]) dmHistories[currentChat.id]=[];
     dmHistories[currentChat.id].push(msg);
     saveDm(currentChat.id, dmHistories[currentChat.id]);
-    renderHome();
   }
   inp.value=''; inp.style.height='';
   cancelReply();
@@ -1046,9 +1049,11 @@ function updateMsgLocally(msgId, action, data={}){
     bubble.classList.add('deleted');
     bubble.innerHTML='🗑 Повідомлення видалено';
   } else if(action==='edited'){
-    const textDiv=bubble.querySelector('div:not(.bubble-name):not(.bubble-time):not(.reactions):not(.bubble-reply)');
+    // Find the text div — it's the div that contains the actual message text
+    const allDivs=Array.from(bubble.querySelectorAll(':scope > div'));
+    const textDiv=allDivs.find(d=>!d.classList.contains('bubble-name')&&!d.classList.contains('bubble-time')&&!d.classList.contains('reactions')&&!d.classList.contains('bubble-reply'));
     if(textDiv) textDiv.innerHTML=linkify(esc(data.text));
-    let timeEl=bubble.querySelector('.bubble-time');
+    const timeEl=bubble.querySelector('.bubble-time');
     if(timeEl&&!timeEl.querySelector('.edited-mark')) timeEl.innerHTML+=` <span class="edited-mark">ред.</span>`;
   } else if(action==='reacted'){
     let reactDiv=bubble.querySelector('.reactions');
