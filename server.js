@@ -100,6 +100,23 @@ async function initDb() {
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS username TEXT`);
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash TEXT`);
   await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS users_username_idx ON users(username)`);
+  // Last seen
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS last_seen TIMESTAMPTZ`);
+  // Reply to message
+  await pool.query(`ALTER TABLE group_messages ADD COLUMN IF NOT EXISTS reply_to TEXT`);
+  await pool.query(`ALTER TABLE group_messages ADD COLUMN IF NOT EXISTS reply_preview TEXT`);
+  await pool.query(`ALTER TABLE dm_messages ADD COLUMN IF NOT EXISTS reply_to TEXT`);
+  await pool.query(`ALTER TABLE dm_messages ADD COLUMN IF NOT EXISTS reply_preview TEXT`);
+  // Edit/delete
+  await pool.query(`ALTER TABLE group_messages ADD COLUMN IF NOT EXISTS edited BOOLEAN DEFAULT FALSE`);
+  await pool.query(`ALTER TABLE group_messages ADD COLUMN IF NOT EXISTS deleted BOOLEAN DEFAULT FALSE`);
+  await pool.query(`ALTER TABLE dm_messages ADD COLUMN IF NOT EXISTS edited BOOLEAN DEFAULT FALSE`);
+  await pool.query(`ALTER TABLE dm_messages ADD COLUMN IF NOT EXISTS deleted BOOLEAN DEFAULT FALSE`);
+  // Reactions
+  await pool.query(`CREATE TABLE IF NOT EXISTS reactions (
+    msg_id TEXT, user_id TEXT, emoji TEXT,
+    PRIMARY KEY (msg_id, user_id)
+  )`);
 
   console.log('DB ready');
 }
@@ -133,7 +150,20 @@ function broadcastAll(p, exUid = null) {
 
 function rowToMsg(r) {
   if (!r) return null;
-  return { id: r.id, from: { id: r.from_id, name: r.from_name, color: r.from_color }, text: r.text||undefined, imageData: r.image_data||undefined, fileName: r.file_name||undefined, fileType: r.file_type||undefined, msgType: r.msg_type, time: r.time };
+  return {
+    id: r.id,
+    from: { id: r.from_id, name: r.from_name, color: r.from_color },
+    text: r.deleted ? null : (r.text||undefined),
+    imageData: r.deleted ? null : (r.image_data||undefined),
+    fileName: r.file_name||undefined,
+    fileType: r.file_type||undefined,
+    msgType: r.deleted ? 'deleted' : r.msg_type,
+    time: r.time,
+    edited: r.edited||false,
+    deleted: r.deleted||false,
+    replyTo: r.reply_to||undefined,
+    replyPreview: r.reply_preview||undefined,
+  };
 }
 
 async function getGroupInfo(gid) {
@@ -157,7 +187,7 @@ async function getUserGroups(uid) {
 
 async function allContacts(exUid) {
   const rows = await q(`SELECT * FROM users WHERE id!=$1`, [exUid]);
-  return rows.map(u => ({ id: u.id, name: u.name, color: u.color, online: isOnline(u.id) }));
+  return rows.map(u => ({ id: u.id, name: u.name, color: u.color, online: isOnline(u.id), lastSeen: u.last_seen||null, username: u.username||'' }));
 }
 
 // ── WEBSOCKET ──────────────────────────────────────────
@@ -238,17 +268,18 @@ wss.on('connection', ws => {
     if (d.type === 'group_msg') {
       const gid = String(d.groupId||'');
       if (!await q1(`SELECT 1 FROM group_members WHERE group_id=$1 AND user_id=$2`,[gid,userId])) return;
-      // Check write permission for default groups
       const grp = await q1(`SELECT is_default FROM groups_tbl WHERE id=$1`,[gid]);
       if(grp?.is_default){
         const perm = await q1(`SELECT can_write FROM group_permissions WHERE group_id=$1 AND user_id=$2`,[gid,userId]);
         if(!perm || !perm.can_write){ send(ws,{type:'error',text:'У вас немає дозволу писати в цій групі'}); return; }
       }
       const text = String(d.text||'').slice(0,4000).trim(); if (!text) return;
+      const replyTo = d.replyTo||null;
+      const replyPreview = d.replyPreview ? String(d.replyPreview).slice(0,100) : null;
       const id = uuidv4().slice(0,8), time = new Date().toISOString();
-      await pool.query(`INSERT INTO group_messages (id,group_id,from_id,from_name,from_color,text,msg_type,time) VALUES ($1,$2,$3,$4,$5,$6,'text',$7)`,
-        [id,gid,userId,user.name,user.color,text,time]);
-      const msg = { id, from:{id:userId,name:user.name,color:user.color}, text, msgType:'text', time };
+      await pool.query(`INSERT INTO group_messages (id,group_id,from_id,from_name,from_color,text,msg_type,reply_to,reply_preview,time) VALUES ($1,$2,$3,$4,$5,$6,'text',$7,$8,$9)`,
+        [id,gid,userId,user.name,user.color,text,replyTo,replyPreview,time]);
+      const msg = { id, from:{id:userId,name:user.name,color:user.color}, text, msgType:'text', time, replyTo, replyPreview };
       broadcastGroup(gid, { type:'group_msg', groupId:gid, msg }, userId);
     }
 
@@ -274,11 +305,82 @@ wss.on('connection', ws => {
     else if (d.type === 'dm') {
       const toId = String(d.toId||''); if (!toId||toId===userId) return;
       const text = String(d.text||'').slice(0,4000).trim(); if (!text) return;
+      const replyTo = d.replyTo||null;
+      const replyPreview = d.replyPreview ? String(d.replyPreview).slice(0,100) : null;
       const id = uuidv4().slice(0,8), time = new Date().toISOString();
-      await pool.query(`INSERT INTO dm_messages (id,from_id,to_id,from_name,from_color,text,msg_type,time) VALUES ($1,$2,$3,$4,$5,$6,'text',$7)`,
-        [id,userId,toId,user.name,user.color,text,time]);
-      const msg = { id, from:{id:userId,name:user.name,color:user.color}, text, msgType:'text', time };
+      await pool.query(`INSERT INTO dm_messages (id,from_id,to_id,from_name,from_color,text,msg_type,reply_to,reply_preview,time) VALUES ($1,$2,$3,$4,$5,$6,'text',$7,$8,$9)`,
+        [id,userId,toId,user.name,user.color,text,replyTo,replyPreview,time]);
+      const msg = { id, from:{id:userId,name:user.name,color:user.color}, text, msgType:'text', time, replyTo, replyPreview };
       sendTo(toId, { type:'dm_msg', dmWith:userId, msg, fromName:user.name, fromColor:user.color });
+    }
+
+    // ── EDIT MESSAGE ──
+    else if (d.type === 'edit_msg') {
+      const msgId = String(d.msgId||'');
+      const newText = String(d.text||'').slice(0,4000).trim(); if (!newText) return;
+      // Try group message
+      const gMsg = await q1(`SELECT * FROM group_messages WHERE id=$1 AND from_id=$2`,[msgId,userId]);
+      if(gMsg){
+        await pool.query(`UPDATE group_messages SET text=$1, edited=TRUE WHERE id=$2`,[newText,msgId]);
+        broadcastGroup(gMsg.group_id, { type:'msg_edited', msgId, newText, groupId:gMsg.group_id });
+        return;
+      }
+      // Try dm message
+      const dMsg = await q1(`SELECT * FROM dm_messages WHERE id=$1 AND from_id=$2`,[msgId,userId]);
+      if(dMsg){
+        await pool.query(`UPDATE dm_messages SET text=$1, edited=TRUE WHERE id=$2`,[newText,msgId]);
+        send(ws, { type:'msg_edited', msgId, newText, dmWith:dMsg.to_id });
+        sendTo(dMsg.to_id, { type:'msg_edited', msgId, newText, dmWith:userId });
+      }
+    }
+
+    // ── DELETE MESSAGE ──
+    else if (d.type === 'delete_msg') {
+      const msgId = String(d.msgId||'');
+      const gMsg = await q1(`SELECT * FROM group_messages WHERE id=$1 AND from_id=$2`,[msgId,userId]);
+      if(gMsg){
+        await pool.query(`UPDATE group_messages SET deleted=TRUE, text=NULL WHERE id=$1`,[msgId]);
+        broadcastGroup(gMsg.group_id, { type:'msg_deleted', msgId, groupId:gMsg.group_id });
+        return;
+      }
+      const dMsg = await q1(`SELECT * FROM dm_messages WHERE id=$1 AND from_id=$2`,[msgId,userId]);
+      if(dMsg){
+        await pool.query(`UPDATE dm_messages SET deleted=TRUE, text=NULL WHERE id=$1`,[msgId]);
+        send(ws, { type:'msg_deleted', msgId, dmWith:dMsg.to_id });
+        sendTo(dMsg.to_id, { type:'msg_deleted', msgId, dmWith:userId });
+      }
+    }
+
+    // ── REACT ──
+    else if (d.type === 'react') {
+      const msgId = String(d.msgId||'');
+      const emoji = String(d.emoji||'').slice(0,8);
+      if (!emoji) return;
+      // Toggle reaction
+      const existing = await q1(`SELECT 1 FROM reactions WHERE msg_id=$1 AND user_id=$2`,[msgId,userId]);
+      if(existing){
+        const cur = await q1(`SELECT emoji FROM reactions WHERE msg_id=$1 AND user_id=$2`,[msgId,userId]);
+        if(cur.emoji===emoji){
+          await pool.query(`DELETE FROM reactions WHERE msg_id=$1 AND user_id=$2`,[msgId,userId]);
+        } else {
+          await pool.query(`UPDATE reactions SET emoji=$1 WHERE msg_id=$2 AND user_id=$3`,[emoji,msgId,userId]);
+        }
+      } else {
+        await pool.query(`INSERT INTO reactions (msg_id,user_id,emoji) VALUES ($1,$2,$3)`,[msgId,userId,emoji]);
+      }
+      // Get all reactions for this message
+      const allReacts = await q(`SELECT emoji, COUNT(*) as cnt FROM reactions WHERE msg_id=$1 GROUP BY emoji`,[msgId]);
+      const reactMap = {}; allReacts.forEach(r=>reactMap[r.emoji]=parseInt(r.cnt));
+      // Find which chat this message belongs to and broadcast
+      const gMsg = await q1(`SELECT group_id FROM group_messages WHERE id=$1`,[msgId]);
+      if(gMsg) broadcastGroup(gMsg.group_id, { type:'reactions_updated', msgId, reactions:reactMap });
+      else {
+        const dMsg = await q1(`SELECT from_id, to_id FROM dm_messages WHERE id=$1`,[msgId]);
+        if(dMsg){
+          send(ws, { type:'reactions_updated', msgId, reactions:reactMap });
+          sendTo(dMsg.from_id===userId?dMsg.to_id:dMsg.from_id, { type:'reactions_updated', msgId, reactions:reactMap });
+        }
+      }
     }
 
     else if (d.type === 'dm_img') {
@@ -368,7 +470,12 @@ wss.on('connection', ws => {
 
   ws.on('close', () => {
     const uid = wsToUser.get(ws);
-    if (uid) { const s=sessions.get(uid); if(s) s.ws=null; broadcastAll({ type:'contact_offline', userId:uid }, uid); wsToUser.delete(ws); }
+    if (uid) {
+      const s=sessions.get(uid); if(s) s.ws=null;
+      pool.query(`UPDATE users SET last_seen=NOW() WHERE id=$1`,[uid]).catch(()=>{});
+      broadcastAll({ type:'contact_offline', userId:uid, lastSeen: new Date().toISOString() }, uid);
+      wsToUser.delete(ws);
+    }
   });
 });
 
