@@ -270,7 +270,7 @@ body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradie
 
   <div class="input-row">
     <div class="input-box">
-      <button class="attach-btn" onclick="toggleAttachMenu()">📎</button>
+      <button class="attach-btn" onclick="toggleAttachMenu(event)">📎</button>
       <input type="file" id="photoInp" accept="image/*" onchange="sendImg(this)" style="display:none">
       <input type="file" id="videoInp" accept="video/*" onchange="sendVideo(this)" style="display:none">
       <input type="file" id="docInp" onchange="sendDoc(this)" style="display:none">
@@ -881,7 +881,8 @@ function saveNewName(){
 }
 
 // ── ATTACH MENU ───────────────────────────────────────
-function toggleAttachMenu(){
+function toggleAttachMenu(e){
+  if(e) e.stopPropagation();
   const m=document.getElementById('attachMenu');
   const isOpen=m.style.display==='flex';
   m.style.display=isOpen?'none':'flex';
@@ -891,7 +892,7 @@ function closeAttachMenu(){ document.getElementById('attachMenu').style.display=
 
 document.addEventListener('click', e=>{
   const menu=document.getElementById('attachMenu');
-  if(menu&&menu.style.display==='flex'&&!menu.contains(e.target)&&!e.target.closest('[onclick="toggleAttachMenu()"]')) closeAttachMenu();
+  if(menu&&menu.style.display==='flex'&&!menu.contains(e.target)) closeAttachMenu();
 });
 
 // Aliases that call sendFile
