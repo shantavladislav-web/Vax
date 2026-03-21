@@ -55,6 +55,25 @@ async function initDb() {
     );
     CREATE TABLE IF NOT EXISTS banned_users (id TEXT PRIMARY KEY);
   `);
+  // Add ban_until column for auto-unban after 1 month
+  await pool.query(`ALTER TABLE banned_users ADD COLUMN IF NOT EXISTS banned_at TIMESTAMPTZ DEFAULT NOW()`);
+  await pool.query(`ALTER TABLE banned_users ADD COLUMN IF NOT EXISTS ban_until TIMESTAMPTZ`);
+
+  // Auto-delete banned accounts after 1 month
+  setInterval(async () => {
+    try {
+      const expired = await q(`SELECT id FROM banned_users WHERE ban_until IS NOT NULL AND ban_until < NOW()`);
+      for(const r of expired){
+        // Delete all user data permanently
+        await pool.query(`DELETE FROM group_members WHERE user_id=$1`,[r.id]);
+        await pool.query(`DELETE FROM dm_messages WHERE from_id=$1 OR to_id=$1`,[r.id]);
+        await pool.query(`DELETE FROM group_messages WHERE from_id=$1`,[r.id]);
+        await pool.query(`DELETE FROM banned_users WHERE id=$1`,[r.id]);
+        await pool.query(`DELETE FROM users WHERE id=$1`,[r.id]);
+        console.log('Auto-deleted banned user:', r.id);
+      }
+    } catch(e){ console.error('Auto-delete error:', e); }
+  }, 60*60*1000);
 
   const defaults = [
     { id: 'g_general', name: 'Загальний', emoji: '💬' },
@@ -150,7 +169,11 @@ wss.on('connection', ws => {
       if (!username || !password) { send(ws, { type:'auth_error', msg:'Введіть логін і пароль' }); return; }
       const user = await q1(`SELECT * FROM users WHERE username=$1`, [username]);
       if (!user) { send(ws, { type:'auth_error', msg:'Користувача не знайдено' }); return; }
-      if (await q1(`SELECT 1 FROM banned_users WHERE id=$1`, [user.id])) { send(ws, { type:'banned' }); ws.close(); return; }
+      if (await q1(`SELECT 1 FROM banned_users WHERE id=$1`, [user.id])) {
+        const ban = await q1(`SELECT ban_until FROM banned_users WHERE id=$1`, [user.id]);
+        const until = ban?.ban_until ? new Date(ban.ban_until).toLocaleDateString('uk-UA') : 'назавжди';
+        send(ws, { type:'banned', reason:`Ваш акаунт заблоковано до ${until}` }); ws.close(); return;
+      }
       if (user.password_hash !== hashPassword(password)) { send(ws, { type:'auth_error', msg:'Невірний пароль' }); return; }
       // Login success
       sessions.set(user.id, { name: user.name, color: user.color, ws });
@@ -342,8 +365,14 @@ app.post('/api/admin/login', (req,res) => {
 
 app.post('/api/admin/stats', async (req,res) => {
   if (req.body.password!==ADMIN_PASS) return res.status(403).json({ok:false});
-  const users = (await q(`SELECT * FROM users`)).map(u=>({id:u.id,name:u.name,color:u.color,online:isOnline(u.id)}));
-  const grps  = await Promise.all((await q(`SELECT * FROM groups_tbl`)).map(async g=>({
+  const bans = await q(`SELECT id, ban_until FROM banned_users`);
+  const banMap = {}; bans.forEach(b=>banMap[b.id]={until:b.ban_until});
+  const users = (await q(`SELECT * FROM users`)).map(u=>({
+    id:u.id, name:u.name, color:u.color, username:u.username||'',
+    online:isOnline(u.id), banned:!!banMap[u.id],
+    banUntil: banMap[u.id]?.until||null
+  }));
+  const grps = await Promise.all((await q(`SELECT * FROM groups_tbl`)).map(async g=>({
     id:g.id, name:g.name, emoji:g.emoji, isDefault:g.is_default,
     memberCount: (await q1(`SELECT COUNT(*) as c FROM group_members WHERE group_id=$1`,[g.id]))?.c||0,
     msgCount:    (await q1(`SELECT COUNT(*) as c FROM group_messages WHERE group_id=$1`,[g.id]))?.c||0,
@@ -354,15 +383,26 @@ app.post('/api/admin/stats', async (req,res) => {
 app.post('/api/admin/ban', async (req,res) => {
   if (req.body.password!==ADMIN_PASS) return res.status(403).json({ok:false});
   const uid=req.body.userId;
-  await pool.query(`INSERT INTO banned_users (id) VALUES ($1) ON CONFLICT DO NOTHING`,[uid]);
-  const s=sessions.get(uid); if(s?.ws){send(s.ws,{type:'banned'});s.ws.close();}
+  const banUntil = new Date(Date.now() + 30*24*60*60*1000); // 1 month
+  await pool.query(`INSERT INTO banned_users (id,banned_at,ban_until) VALUES ($1,NOW(),$2) ON CONFLICT (id) DO UPDATE SET banned_at=NOW(), ban_until=$2`, [uid, banUntil]);
+  // Kick from all groups
+  await pool.query(`DELETE FROM group_members WHERE user_id=$1 AND group_id NOT IN (SELECT id FROM groups_tbl WHERE is_default=TRUE)`, [uid]);
+  // Disconnect if online
+  const s=sessions.get(uid);
+  if(s?.ws){ send(s.ws,{type:'banned',reason:'Ваш акаунт заблоковано адміністратором'}); s.ws.close(); }
+  // Notify everyone this user went offline
   broadcastAll({type:'contact_offline',userId:uid});
-  res.json({ok:true});
+  res.json({ok:true, banUntil});
 });
 
 app.post('/api/admin/unban', async (req,res) => {
   if (req.body.password!==ADMIN_PASS) return res.status(403).json({ok:false});
-  await pool.query(`DELETE FROM banned_users WHERE id=$1`,[req.body.userId]);
+  const uid = req.body.userId;
+  await pool.query(`DELETE FROM banned_users WHERE id=$1`,[uid]);
+  // Restore default groups
+  for(const gid of ['g_general','g_games','g_music']){
+    await pool.query(`INSERT INTO group_members (group_id,user_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`,[gid,uid]);
+  }
   res.json({ok:true});
 });
 
