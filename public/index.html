@@ -753,6 +753,7 @@ function handle(msg){
       }
       if(currentChat&&currentChat.type==='dm'&&currentChat.id===dmId){
         appendMsg(msg.msg, true);
+        playNotifSound();
       } else {
         unread[dmId]=(unread[dmId]||0)+1;
         renderHome();
@@ -763,13 +764,8 @@ function handle(msg){
     case 'dm_history':
       dmHistories[msg.toId]=msg.messages;
       saveDm(msg.toId, msg.messages);
-      // Only re-render if this is the active chat AND messages area is empty or stale
       if(currentChat&&currentChat.type==='dm'&&currentChat.id===msg.toId){
-        const el=document.getElementById('messages');
-        // Only render if we have more messages from server than locally shown
-        if(el.querySelectorAll('[data-msg-id]').length < msg.messages.length){
-          renderMessages(msg.messages);
-        }
+        renderMessages(msg.messages);
       }
       break;
 
@@ -989,20 +985,18 @@ function openDm(id){
   const c=contacts[id]||{id,name:'?',color:'#888',online:false};
   currentChat={type:'dm',id};
   unread[id]=0;
-  document.getElementById('pollBtn').style.display='none'; // hide poll button in DMs
+  document.getElementById('pollBtn').style.display='none';
   document.getElementById('chatPeerAv').textContent=ini(c.name);
   document.getElementById('chatPeerAv').style.background=c.color;
   document.getElementById('chatPeerAv').className='chat-peer-av';
   document.getElementById('chatPeerName').textContent=c.name;
-  document.getElementById('pollBtn').style.display='none';
   updateChatStatus();
-  // Show cached
-  if(!dmHistories[id]) dmHistories[id]=loadDm(id);
-  renderMessages(dmHistories[id]);
+  // Show cached first (fast), then server will update
+  const cached=dmHistories[id]||loadDm(id)||[];
+  renderMessages(cached);
   showScreen('chatScreen');
-  // Request from server
+  // Always request fresh from server for sync across devices
   ws.send(JSON.stringify({type:'get_dm',toId:id}));
-  renderHome();
 }
 
 function updateChatStatus(){
@@ -1702,19 +1696,39 @@ async function requestPush(){
   } catch(e){}
 }
 
+// ── NOTIFICATION SOUND ────────────────────────────────
+function playNotifSound(){
+  try {
+    const ctx = new (window.AudioContext||window.webkitAudioContext)();
+    // Two-tone ping sound
+    [880, 1100].forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.frequency.value = freq;
+      osc.type = 'sine';
+      gain.gain.setValueAtTime(0, ctx.currentTime + i*0.1);
+      gain.gain.linearRampToValueAtTime(0.3, ctx.currentTime + i*0.1 + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + i*0.1 + 0.2);
+      osc.start(ctx.currentTime + i*0.1);
+      osc.stop(ctx.currentTime + i*0.1 + 0.2);
+    });
+  } catch(e){}
+}
+
 async function notifyMsg(fromName, msg){
+  // Always play sound if tab not focused
+  if(document.visibilityState!=='visible') playNotifSound();
   if(document.visibilityState==='visible') return;
   if(!('Notification' in window)||Notification.permission!=='granted') return;
   const body = msg.msgType==='image'?'📷 Фото надіслано':msg.text?.slice(0,80)||'';
   const title = 'VAX · ' + fromName;
   try {
-    // Use Service Worker to show notification (works when app is in background)
     if('serviceWorker' in navigator){
       const reg = await navigator.serviceWorker.ready;
-      // Send message to SW
       reg.active?.postMessage({ type:'NOTIFY', title, body, tag: msg.from?.id||'vax' });
     } else {
-      // Fallback: direct notification
       new Notification(title, { body, icon:'/icons/icon-192.png' });
     }
   } catch(e){ console.log('Notify error:', e); }
