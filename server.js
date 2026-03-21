@@ -525,7 +525,22 @@ wss.on('connection', ws => {
       broadcastGroup(poll.group_id, { type:'poll_updated', pollId:pid, votes:votesMap });
     }
 
-    else if (d.type === 'ping') {
+    // ── WEBRTC SIGNALING ──
+    else if (d.type === 'call_offer') {
+      sendTo(String(d.toId||''), { type:'call_offer', fromId:userId, offer:d.offer });
+    }
+    else if (d.type === 'call_answer') {
+      sendTo(String(d.toId||''), { type:'call_answer', fromId:userId, answer:d.answer });
+    }
+    else if (d.type === 'call_ice') {
+      sendTo(String(d.toId||''), { type:'call_ice', fromId:userId, candidate:d.candidate });
+    }
+    else if (d.type === 'call_reject') {
+      sendTo(String(d.toId||''), { type:'call_reject', fromId:userId });
+    }
+    else if (d.type === 'call_end') {
+      sendTo(String(d.toId||''), { type:'call_end', fromId:userId });
+    }
       send(ws, { type:'pong' });
     }
 
