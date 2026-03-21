@@ -34,9 +34,12 @@ async function uploadToS3(base64data, fileName, mimeType) {
       Key: key,
       Body: buffer,
       ContentType: mimeType || 'application/octet-stream',
-      ACL: 'public-read',
     }));
-    return `${process.env.AWS_ENDPOINT_URL}/${S3_BUCKET}/${key}`;
+    // Railway t3.storageapi.dev public URL format
+    const endpoint = process.env.AWS_ENDPOINT_URL.replace(/\/$/, '');
+    const url = `${endpoint}/${S3_BUCKET}/${key}`;
+    console.log('S3 uploaded:', url);
+    return url;
   } catch(e) {
     console.error('S3 upload error:', e.message);
     return null;
