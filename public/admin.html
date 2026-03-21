@@ -222,7 +222,8 @@ function renderUsers(users){
       </td>
       <td style="display:flex;gap:6px;flex-wrap:wrap">
         ${u.banned
-          ? `<button class="action-btn edit" onclick="confirmUnban('${u.id}','${esc(u.name)}')">✅ Розбан</button>`
+          ? `<button class="action-btn edit" onclick="confirmUnban('${u.id}','${esc(u.name)}')">✅ Розбан</button>
+             <button class="action-btn" style="border-color:var(--accent3);color:var(--accent3)" onclick="confirmDeleteNow('${u.id}','${esc(u.name)}')">🗑 Видалити зараз</button>`
           : `<button class="action-btn" onclick="openBan('${u.id}','${esc(u.name)}')">🚫 Бан</button>`
         }
       </td>
@@ -256,6 +257,12 @@ function confirmUnban(id, name){
   if(!confirm(`Розблокувати "${name}"?`)) return;
   fetch('/api/admin/unban', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ password:pass, userId:id }) })
     .then(r=>r.json()).then(d=>{ if(d.ok){ toast('✅ Користувача розблоковано'); loadStats(); } });
+}
+
+function confirmDeleteNow(id, name){
+  if(!confirm(`Видалити акаунт "${name}" НАЗАВЖДИ прямо зараз?\n\nЦю дію не можна скасувати!`)) return;
+  fetch('/api/admin/delete-user', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ password:pass, userId:id }) })
+    .then(r=>r.json()).then(d=>{ if(d.ok){ toast('🗑 Акаунт видалено назавжди'); loadStats(); } });
 }
 
 // DELETE GROUP
