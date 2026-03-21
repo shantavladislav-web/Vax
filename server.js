@@ -240,6 +240,12 @@ wss.on('connection', ws => {
       wsToUser.set(ws, user.id);
       send(ws, { type:'init', user:{id:user.id,name:user.name,color:user.color,username:user.username}, groups: await getUserGroups(user.id), contacts: await allContacts(user.id) });
       broadcastAll({ type:'contact_online', user:{id:user.id,name:user.name,color:user.color,online:true} }, user.id);
+      // Mark undelivered messages as delivered and notify senders
+      const undelivered = await q(`SELECT id, from_id FROM dm_messages WHERE to_id=$1 AND delivered=FALSE`,[user.id]);
+      for(const r of undelivered){
+        await pool.query(`UPDATE dm_messages SET delivered=TRUE WHERE id=$1`,[r.id]);
+        sendTo(r.from_id, { type:'msg_status', msgId:r.id, delivered:true, read:false });
+      }
       return;
     }
 
@@ -340,17 +346,20 @@ wss.on('connection', ws => {
       sendTo(toId, { type:'dm_msg', dmWith:userId, msg, fromName:user.name, fromColor:user.color });
       // Notify sender of delivery status
       send(ws, { type:'msg_status', msgId:id, delivered:isDelivered, read:false });
+      // If delivered, also update DB
+      if(isDelivered) await pool.query(`UPDATE dm_messages SET delivered=TRUE WHERE id=$1`,[id]);
     }
 
     // ── MARK AS READ ──
     else if (d.type === 'mark_read') {
-      const toId = String(d.toId||'');
-      // Mark all messages from toId to userId as read
-      await pool.query(`UPDATE dm_messages SET read_at=NOW(), delivered=TRUE WHERE from_id=$1 AND to_id=$2 AND read_at IS NULL`,[toId,userId]);
-      // Get ids of updated messages
-      const updated = await q(`SELECT id FROM dm_messages WHERE from_id=$1 AND to_id=$2 AND read_at IS NOT NULL`,[toId,userId]);
-      // Notify sender that messages were read
-      updated.forEach(r=>sendTo(toId, { type:'msg_status', msgId:r.id, delivered:true, read:true }));
+      const fromId = String(d.toId||''); // toId = person whose messages we're reading
+      // Mark unread messages as read
+      const updated = await q(`SELECT id FROM dm_messages WHERE from_id=$1 AND to_id=$2 AND read_at IS NULL`,[fromId,userId]);
+      if(updated.length > 0){
+        await pool.query(`UPDATE dm_messages SET read_at=NOW(), delivered=TRUE WHERE from_id=$1 AND to_id=$2 AND read_at IS NULL`,[fromId,userId]);
+        // Notify the original sender that their messages were read
+        updated.forEach(r => sendTo(fromId, { type:'msg_status', msgId:r.id, delivered:true, read:true }));
+      }
     }
 
     // ── EDIT MESSAGE ──
