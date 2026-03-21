@@ -419,6 +419,8 @@ app.post('/api/admin/delete-user', async (req,res) => {
   broadcastAll({type:'contact_offline',userId:uid});
   res.json({ok:true});
 });
+
+app.post('/api/admin/delete-group', async (req,res) => {
   if (req.body.password!==ADMIN_PASS) return res.status(403).json({ok:false});
   const gid=req.body.groupId;
   const members=(await q(`SELECT user_id FROM group_members WHERE group_id=$1`,[gid])).map(r=>r.user_id);
