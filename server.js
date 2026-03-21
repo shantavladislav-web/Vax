@@ -34,6 +34,7 @@ async function uploadToS3(base64data, fileName, mimeType) {
       Key: key,
       Body: buffer,
       ContentType: mimeType || 'application/octet-stream',
+      ACL: 'public-read',
     }));
     return `${process.env.AWS_ENDPOINT_URL}/${S3_BUCKET}/${key}`;
   } catch(e) {
