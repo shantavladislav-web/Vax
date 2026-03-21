@@ -635,11 +635,13 @@ function setAuthErr2(msg){
 
 // ── WEBSOCKET ─────────────────────────────────────────
 let _reconnecting = false;
+let _reconnectTimer = null;
 
 function connectWs(authType, username, password, name=''){
   if(_reconnecting) return;
   _reconnecting = true;
-  setTimeout(()=>_reconnecting=false, 3000);
+  if(_reconnectTimer) clearTimeout(_reconnectTimer);
+  _reconnectTimer = setTimeout(()=>_reconnecting=false, 5000);
 
   if(ws){ try{ ws.close(); }catch(e){} ws=null; }
   if(window._pingInterval){ clearInterval(window._pingInterval); window._pingInterval=null; }
@@ -649,6 +651,7 @@ function connectWs(authType, username, password, name=''){
 
   newWs.onopen=()=>{
     _reconnecting = false;
+    if(_reconnectTimer){ clearTimeout(_reconnectTimer); _reconnectTimer=null; }
     if(window._offlineTimer){ clearTimeout(window._offlineTimer); window._offlineTimer=null; }
     ws=newWs;
     const payload = authType==='login'
@@ -665,14 +668,16 @@ function connectWs(authType, username, password, name=''){
   newWs.onclose=()=>{
     if(ws===newWs) ws=null;
     if(window._pingInterval){ clearInterval(window._pingInterval); window._pingInterval=null; }
+    _reconnecting = false;
     if(!me) return;
     const saved=lsGet('vax_auth',null);
     if(!saved) return;
-    window._offlineTimer=setTimeout(()=>setBadge('ОФЛАЙН','var(--accent3)'), 4000);
-    setTimeout(()=>connectWs('login',saved.username,saved.password), 2000);
+    window._offlineTimer=setTimeout(()=>setBadge('ОФЛАЙН','var(--accent3)'), 5000);
+    if(_reconnectTimer) clearTimeout(_reconnectTimer);
+    _reconnectTimer=setTimeout(()=>connectWs('login',saved.username,saved.password), 3000);
   };
 
-  newWs.onerror=()=>{};
+  newWs.onerror=()=>{ _reconnecting=false; };
 }
 
 
@@ -1734,7 +1739,24 @@ async function notifyMsg(fromName, msg){
   } catch(e){ console.log('Notify error:', e); }
 }
 
-// ── SHEET / OVERLAY ───────────────────────────────────
+// ── MOBILE RECONNECT ──────────────────────────────────
+document.addEventListener('visibilitychange', ()=>{
+  if(document.visibilityState==='visible' && me){
+    // Check if WS is still alive when returning to app
+    if(!ws || ws.readyState===3 || ws.readyState===2){
+      const saved=lsGet('vax_auth',null);
+      if(saved) connectWs('login',saved.username,saved.password);
+    }
+  }
+});
+
+// Keep alive on mobile — prevent browser from killing WS
+window.addEventListener('focus', ()=>{
+  if(me && (!ws || ws.readyState!==1)){
+    const saved=lsGet('vax_auth',null);
+    if(saved) connectWs('login',saved.username,saved.password);
+  }
+});
 function openSheet(name){ document.getElementById(name+'Sheet').classList.add('open'); }
 function closeSheet(name){ document.getElementById(name+'Sheet').classList.remove('open'); }
 
