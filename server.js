@@ -191,19 +191,18 @@ async function allContacts(exUid) {
 }
 
 // ── HEARTBEAT ─────────────────────────────────────────
-// Keep connections alive — Railway drops idle WS after ~60s
 setInterval(() => {
-  for (const [uid, s] of sessions) {
-    if (s.ws?.readyState === 1) {
-      s.ws.ping();
-    } else if (s.ws?.readyState === 3) {
-      s.ws = null;
-    }
-  }
-}, 20000);
+  wss.clients.forEach(ws => {
+    if (ws.isAlive === false) { ws.terminate(); return; }
+    ws.isAlive = false;
+    ws.ping();
+  });
+}, 15000);
 
 // ── WEBSOCKET ──────────────────────────────────────────
 wss.on('connection', ws => {
+  ws.isAlive = true;
+  ws.on('pong', () => { ws.isAlive = true; });
   ws.on('message', async raw => {
     let d; try { d = JSON.parse(raw); } catch { return; }
     const userId = wsToUser.get(ws);
