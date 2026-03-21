@@ -554,7 +554,13 @@ function setAuthErr2(msg){
 }
 
 // ── WEBSOCKET ─────────────────────────────────────────
+let _reconnecting = false;
+
 function connectWs(authType, username, password, name=''){
+  if(_reconnecting) return;
+  _reconnecting = true;
+  setTimeout(()=>_reconnecting=false, 3000);
+
   if(ws){ try{ ws.close(); }catch(e){} ws=null; }
   if(window._pingInterval){ clearInterval(window._pingInterval); window._pingInterval=null; }
 
@@ -562,6 +568,7 @@ function connectWs(authType, username, password, name=''){
   const newWs=new WebSocket(`${proto}://${location.host}`);
 
   newWs.onopen=()=>{
+    _reconnecting = false;
     if(window._offlineTimer){ clearTimeout(window._offlineTimer); window._offlineTimer=null; }
     ws=newWs;
     const payload = authType==='login'
@@ -576,12 +583,13 @@ function connectWs(authType, username, password, name=''){
   newWs.onmessage=({data})=>{ try{ handle(JSON.parse(data)); }catch(e){} };
 
   newWs.onclose=()=>{
+    if(ws===newWs) ws=null;
     if(window._pingInterval){ clearInterval(window._pingInterval); window._pingInterval=null; }
     if(!me) return;
     const saved=lsGet('vax_auth',null);
     if(!saved) return;
     window._offlineTimer=setTimeout(()=>setBadge('ОФЛАЙН','var(--accent3)'), 4000);
-    setTimeout(()=>connectWs('login',saved.username,saved.password), 500);
+    setTimeout(()=>connectWs('login',saved.username,saved.password), 2000);
   };
 
   newWs.onerror=()=>{};
