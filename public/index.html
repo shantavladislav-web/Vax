@@ -590,16 +590,18 @@ function handle(msg){
 
     case 'init':
       me=msg.user;
+      const isFirstLogin = !me;
+      me=msg.user;
       setBadge('●','var(--green)');
       const av=document.getElementById('myAv');
       av.style.background=me.color; av.textContent=ini(me.name);
       msg.groups.forEach(g=>{ groups[g.id]=g; });
       msg.contacts.forEach(c=>{ contacts[c.id]=c; });
-      showScreen('homeScreen');
+      // Only go home on first login, not on reconnect
+      if(isFirstLogin) showScreen('homeScreen');
       renderHome();
       requestPush();
-      // Show set password modal for users without username
-      if(!me.username && !lsGet('vax_pass_skipped',false)){
+      if(!me.username && !lsGet('vax_pass_skipped',false) && isFirstLogin){
         setTimeout(()=>document.getElementById('setPassSheet').classList.add('open'), 1000);
       }
       break;
@@ -1049,12 +1051,15 @@ function updateMsgLocally(msgId, action, data={}){
     bubble.classList.add('deleted');
     bubble.innerHTML='🗑 Повідомлення видалено';
   } else if(action==='edited'){
-    // Find the text div — it's the div that contains the actual message text
-    const allDivs=Array.from(bubble.querySelectorAll(':scope > div'));
-    const textDiv=allDivs.find(d=>!d.classList.contains('bubble-name')&&!d.classList.contains('bubble-time')&&!d.classList.contains('reactions')&&!d.classList.contains('bubble-reply'));
-    if(textDiv) textDiv.innerHTML=linkify(esc(data.text));
-    const timeEl=bubble.querySelector('.bubble-time');
-    if(timeEl&&!timeEl.querySelector('.edited-mark')) timeEl.innerHTML+=` <span class="edited-mark">ред.</span>`;
+    // For mine: bubble is direct child. For theirs: bubble is inside a nested div
+    const bubble2 = wrap.querySelector('.bubble') || wrap.querySelector('.bubble.mine') || wrap.querySelector('.bubble.theirs');
+    if(!bubble2) return;
+    // The text content div is the last direct div child that's not bubble-name, bubble-time, reactions, bubble-reply
+    const candidates = Array.from(bubble2.children);
+    const textDiv = candidates.find(d => d.tagName==='DIV' && !d.classList.contains('bubble-name') && !d.classList.contains('bubble-time') && !d.classList.contains('reactions') && !d.classList.contains('bubble-reply'));
+    if(textDiv) textDiv.innerHTML = linkify(esc(data.text));
+    const timeEl = bubble2.querySelector('.bubble-time');
+    if(timeEl && !timeEl.querySelector('.edited-mark')) timeEl.innerHTML += ` <span class="edited-mark">ред.</span>`;
   } else if(action==='reacted'){
     let reactDiv=bubble.querySelector('.reactions');
     const html=renderReactions(msgId, data.reactions, wrap.classList.contains('mine'));
